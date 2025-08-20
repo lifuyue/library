@@ -1,0 +1,40 @@
+/* CSS Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  position: relative;
+  font-weight: normal;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-text);
+  background: var(--color-background);
+  transition: color 0.5s, background-color 0.5s;
+  line-height: 1.6;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-size: 15px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Color variables */
+:root {
+  --color-background: #ffffff;
+  --color-background-soft: #f8f9fa;
+  --color-background-mute: #f2f3f4;
+  
+  --color-border: #dcdfe6;
+  --color-border-hover: #c0c4cc;
+  
+  --color-heading: #2c3e50;
+  --color-text: #606266;
+  --color-text-soft: #909399;
+  
+  --color-primary: #409eff;
+  --color-primary-soft: #79bbff;
+  --color-primary-light: #ecf5ff;
+}

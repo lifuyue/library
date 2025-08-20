@@ -55,7 +55,61 @@ library/
 
 ## 快速开始
 
-### 环境要求
+### 🚀 智能启动器 (推荐)
+
+使用交互式启动器，最简单的方式：
+
+```bash
+# 激活虚拟环境 (如果还没激活)
+# Windows:
+.venv\Scripts\activate
+# Linux/Mac:
+source .venv/bin/activate
+
+# 运行智能启动器
+python dev_launcher.py
+```
+
+智能启动器提供以下选项：
+1. 🚀 启动完整开发环境 (前端 + 后端)
+2. 🔧 仅启动后端服务 (API + 数据库)  
+3. 🌐 仅启动前端服务 (Vue.js 应用)
+4. 🧹 清理端口占用
+5. 📖 查看启动说明
+
+### ⚡ 快速启动脚本
+
+如果你已经熟悉项目，可以直接使用以下脚本：
+
+```bash
+# Python脚本 (跨平台，推荐)
+python local_dev.py                    # 启动全部服务
+python local_dev.py --mode backend     # 仅启动后端
+python local_dev.py --mode frontend    # 仅启动前端
+python local_dev.py --clean           # 清理端口占用
+
+# Windows批处理
+start_local.bat                       # 启动全部服务
+start_local.bat --backend-only        # 仅启动后端
+start_local.bat --frontend-only       # 仅启动前端
+
+# Linux/Mac Shell脚本
+chmod +x start_local.sh
+./start_local.sh                      # 启动全部服务
+./start_local.sh --backend-only       # 仅启动后端
+./start_local.sh --frontend-only      # 仅启动前端
+```
+
+### 🌐 访问地址
+
+启动成功后，你可以访问：
+
+- **前端应用**: http://localhost:3000
+- **后端API**: http://127.0.0.1:8000  
+- **API文档**: http://127.0.0.1:8000/docs
+- **健康检查**: http://127.0.0.1:8000/api/health
+
+### 📋 环境要求
 
 - Python 3.8+
 - Node.js 16+

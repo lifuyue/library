@@ -49,8 +49,8 @@
           <el-col :xs="24" :sm="12" :md="6" v-for="material in recentMaterials" :key="material.id">
             <el-card class="material-card" shadow="hover" @click="viewMaterial(material.id)">
               <div class="material-image">
-                <img 
-                  :src="material.thumbnail_path ? `/uploads/${material.thumbnail_path}` : '/placeholder.jpg'" 
+                <img
+                  :src="resolveThumb(material)"
                   :alt="material.title"
                   @error="handleImageError"
                 />
@@ -86,6 +86,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { materialsApi } from '@/api'
 import type { Material } from '@/types'
+import config from '@/config/environment'
 
 const router = useRouter()
 const loading = ref(false)
@@ -150,9 +151,18 @@ const viewMaterial = (id: number) => {
   router.push(`/materials/${id}`)
 }
 
+const PLACEHOLDER = '/placeholder.jpg'
+
+const resolveThumb = (m: Material) => {
+  if (m.thumbnail_path) return `${config.UPLOAD_URL}/${m.thumbnail_path}`
+  if (m.file_path) return `${config.UPLOAD_URL}/${m.file_path}`
+  return PLACEHOLDER
+}
+
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
-  img.src = '/placeholder.jpg'
+  if (img.src.endsWith(PLACEHOLDER)) return
+  img.src = PLACEHOLDER
 }
 
 const loadRecentMaterials = async () => {

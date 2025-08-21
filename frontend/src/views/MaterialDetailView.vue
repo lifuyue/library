@@ -29,14 +29,14 @@
             <div class="media-container">
               <img 
                 v-if="material.file_type === 'image' || material.file_type === 'gif'"
-                :src="`/uploads/${material.file_path}`"
+                :src="resolveMainSrc(material)"
                 :alt="material.title"
                 class="material-image"
                 @error="handleImageError"
               />
               <video 
                 v-else-if="material.file_type === 'video'"
-                :src="`/uploads/${material.file_path}`"
+                :src="`${config.UPLOAD_URL}/${material.file_path}`"
                 controls
                 class="material-video"
               >
@@ -124,7 +124,7 @@
           <el-card class="related-card" shadow="hover" @click="viewRelated(related.id)">
             <div class="related-image">
               <img 
-                :src="related.thumbnail_path ? `/uploads/${related.thumbnail_path}` : '/placeholder.jpg'"
+                :src="resolveThumb(related)"
                 :alt="related.title"
                 @error="handleImageError"
               />
@@ -145,6 +145,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { materialsApi } from '@/api'
+import config from '@/config/environment'
 import type { Material } from '@/types'
 
 const route = useRoute()
@@ -187,9 +188,33 @@ const formatFileSize = (size: number) => {
   return (size / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
+// 占位符常量
+const PLACEHOLDER = '/placeholder.jpg'
+
+// 解析主文件（图片型）
+const resolveMainSrc = (m: Material): string => {
+  const p = m.file_path
+  if (!p) return PLACEHOLDER
+  if (p.startsWith('http://') || p.startsWith('https://')) return p
+  return `${config.UPLOAD_URL.replace(/\/$/, '')}/${p.replace(/^\//, '')}`
+}
+
+// 解析缩略图
+const resolveThumb = (m: Material): string => {
+  if (m.thumbnail_path) {
+    const p = m.thumbnail_path
+    if (p.startsWith('http://') || p.startsWith('https://')) return p
+    return `${config.UPLOAD_URL.replace(/\/$/, '')}/${p.replace(/^\//, '')}`
+  }
+  return PLACEHOLDER
+}
+
+// 防止无限循环
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
-  img.src = '/placeholder.jpg'
+  if ((img as any)._fallbackApplied) return
+  ;(img as any)._fallbackApplied = true
+  img.src = PLACEHOLDER
 }
 
 const loadMaterial = async () => {
@@ -230,7 +255,7 @@ const likeMaterial = async () => {
 const downloadFile = () => {
   if (material.value) {
     const link = document.createElement('a')
-    link.href = `/uploads/${material.value.file_path}`
+    link.href = `${config.UPLOAD_URL}/${material.value.file_path}`
     link.download = material.value.title
     document.body.appendChild(link)
     link.click()

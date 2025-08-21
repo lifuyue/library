@@ -1,5 +1,6 @@
 {
   "name": "cs-materials-frontend",
+  "type": "module",
   "version": "0.0.0",
   "private": true,
   "scripts": {

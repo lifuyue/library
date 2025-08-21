@@ -1,7 +1,8 @@
-// 开发环境配置
+// 开发环境配置 (允许用 VITE_API_BASE_URL 覆盖，以便 local_dev 动态端口注入)
+const DEV_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 export const development = {
-  API_BASE_URL: 'http://localhost:8000',
-  UPLOAD_URL: 'http://localhost:8000/uploads'
+  API_BASE_URL: DEV_BASE,
+  UPLOAD_URL: `${DEV_BASE}/uploads`
 }
 
 // 生产环境配置

@@ -102,11 +102,26 @@
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" :loading="uploading" @click="submitForm">
+          <el-button 
+            type="primary" 
+            :loading="uploading" 
+            :disabled="uploading"
+            @click="submitForm"
+            size="large"
+          >
             <el-icon v-if="!uploading"><Upload /></el-icon>
-            {{ uploading ? '上传中...' : '提交素材' }}
+            <el-icon v-else class="is-loading"><Loading /></el-icon>
+            {{ uploading ? '正在上传素材...' : '提交素材' }}
           </el-button>
-          <el-button @click="resetForm">重置</el-button>
+          <el-button @click="resetForm" :disabled="uploading">重置</el-button>
+          
+          <!-- 上传进度提示 -->
+          <div v-if="uploading" class="upload-tip">
+            <el-text type="info" size="small">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              文件上传中，请耐心等待...
+            </el-text>
+          </div>
         </el-form-item>
       </el-form>
     </el-card>
@@ -117,6 +132,7 @@
 import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type UploadFile } from 'element-plus'
+import { Upload, Loading } from '@element-plus/icons-vue'
 import { materialsApi } from '@/api'
 import type { Category, UploadForm } from '@/types'
 
@@ -126,6 +142,21 @@ const uploadRef = ref()
 const uploading = ref(false)
 const categories = ref<Category[]>([])
 const maps = ref<string[]>([])
+
+// 本地回退常量（后端不可用或超时使用）
+const DEFAULT_CATEGORIES: Category[] = [
+  { value: 'smoke', label: '烟雾弹' },
+  { value: 'flash', label: '闪光弹' },
+  { value: 'he', label: '手雷' },
+  { value: 'molotov', label: '燃烧瓶' },
+  { value: 'position', label: '身位点位' },
+  { value: 'strategy', label: '战术策略' },
+  { value: 'other', label: '其他' }
+]
+const DEFAULT_MAPS: string[] = [
+  'dust2', 'mirage', 'inferno', 'cache', 'overpass',
+  'train', 'cobblestone', 'nuke', 'vertigo', 'ancient'
+]
 
 // 文件相关
 const selectedFile = ref<File>()
@@ -139,7 +170,8 @@ const form = reactive<UploadForm>({
   category: '',
   description: '',
   map_name: '',
-  tags: ''
+  tags: '',
+  file: undefined
 })
 
 // 表单验证规则
@@ -152,7 +184,16 @@ const rules = {
     { required: true, message: '请选择类别', trigger: 'change' }
   ],
   file: [
-    { required: true, message: '请选择文件', trigger: 'change' }
+    { 
+      validator: (_rule: any, _value: any, callback: (err?: Error) => void) => {
+        if (!selectedFile.value) {
+          callback(new Error('请选择文件'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
   ]
 }
 
@@ -165,6 +206,7 @@ const formatFileSize = (size: number) => {
 const handleFileChange = (file: UploadFile) => {
   if (file.raw) {
     selectedFile.value = file.raw
+    form.file = file.raw // 同步到表单模型，供校验使用
     
     // 创建预览
     const reader = new FileReader()
@@ -177,6 +219,13 @@ const handleFileChange = (file: UploadFile) => {
       isVideo.value = type.startsWith('video/')
     }
     reader.readAsDataURL(file.raw)
+
+    // 触发文件字段单独校验（避免已选文件还提示“请选择文件”）
+    formRef.value?.validateField('file')
+  } else {
+    // 清空
+    selectedFile.value = undefined
+    form.file = undefined
   }
 }
 
@@ -197,31 +246,76 @@ const beforeUpload = (file: File) => {
 
 const submitForm = async () => {
   if (!formRef.value) return
-  
   await formRef.value.validate(async (valid) => {
-    if (valid && selectedFile.value) {
-      try {
-        uploading.value = true
-        
-        const formData = new FormData()
-        formData.append('title', form.title)
-        formData.append('category', form.category)
-        formData.append('file', selectedFile.value)
-        
-        if (form.description) formData.append('description', form.description)
-        if (form.map_name) formData.append('map_name', form.map_name)
-        if (form.tags) formData.append('tags', form.tags)
-        
-        const result = await materialsApi.uploadMaterial(formData)
-        
-        ElMessage.success('素材上传成功!')
+    if (!valid) return
+    if (!selectedFile.value) {
+      ElMessage.error('请选择文件')
+      return
+    }
+    try {
+      uploading.value = true
+      
+      // 显示上传开始消息
+      const uploadingMessage = ElMessage({
+        message: '正在上传素材，请稍候...',
+        type: 'info',
+        duration: 0, // 不自动关闭
+        showClose: false
+      })
+      
+      const formData = new FormData()
+      formData.append('title', form.title)
+      formData.append('category', form.category)
+      formData.append('file', selectedFile.value)
+      if (form.description) formData.append('description', form.description)
+      if (form.map_name) formData.append('map_name', form.map_name)
+      if (form.tags) formData.append('tags', form.tags)
+      
+      const result = await materialsApi.uploadMaterial(formData)
+      
+      // 关闭上传中消息
+      uploadingMessage.close()
+      
+      // 显示成功消息
+      ElMessage({
+        message: `素材《${form.title}》上传成功！正在跳转到详情页...`,
+        type: 'success',
+        duration: 3000,
+        showClose: true
+      })
+      
+      // 延迟跳转，让用户看到成功消息
+      setTimeout(() => {
         router.push(`/materials/${result.id}`)
-      } catch (error) {
-        console.error('Upload failed:', error)
-        ElMessage.error('上传失败，请重试')
-      } finally {
-        uploading.value = false
+      }, 1500)
+      
+    } catch (error: any) {
+      console.error('Upload failed:', error)
+      let message = '上传失败，请检查网络连接或重试'
+      // FastAPI 常见错误字段 detail
+      if (error?.response?.data) {
+        const data = error.response.data
+        if (typeof data === 'string') {
+          message = `上传失败：${data}`
+        } else if (data.detail) {
+          if (Array.isArray(data.detail)) {
+            // Pydantic 验证错误数组
+            message = data.detail.map((d: any) => d.msg || d.detail || JSON.stringify(d)).join('; ')
+          } else if (typeof data.detail === 'string') {
+            message = data.detail
+          } else if (typeof data.detail === 'object') {
+            message = JSON.stringify(data.detail)
+          }
+        } else {
+          // 兜底序列化对象避免 [object Object]
+            message = JSON.stringify(data)
+        }
+      } else if (error?.message) {
+        message = error.message
       }
+      ElMessage.error(`上传失败：${message}`)
+    } finally {
+      uploading.value = false
     }
   })
 }
@@ -229,27 +323,45 @@ const submitForm = async () => {
 const resetForm = () => {
   formRef.value?.resetFields()
   selectedFile.value = undefined
+  form.file = undefined
   filePreview.value = ''
   isImage.value = false
   isVideo.value = false
   uploadRef.value?.clearFiles()
 }
 
-const loadCategories = async () => {
+const loadCategories = async (retry = 0) => {
   try {
     const response = await materialsApi.getCategories()
-    categories.value = response.categories
+    if (response?.categories?.length) {
+      categories.value = response.categories
+    } else {
+      throw new Error('empty categories response')
+    }
   } catch (error) {
-    console.error('Failed to load categories:', error)
+    console.warn('加载类别失败，使用本地回退:', error)
+    categories.value = DEFAULT_CATEGORIES
+    // 首次失败尝试一次重试（避免偶发冷启动）
+    if (retry === 0) {
+      setTimeout(() => loadCategories(1), 1500)
+    }
   }
 }
 
-const loadMaps = async () => {
+const loadMaps = async (retry = 0) => {
   try {
     const response = await materialsApi.getMaps()
-    maps.value = response.maps
+    if (response?.maps?.length) {
+      maps.value = response.maps
+    } else {
+      throw new Error('empty maps response')
+    }
   } catch (error) {
-    console.error('Failed to load maps:', error)
+    console.warn('加载地图失败，使用本地回退:', error)
+    maps.value = DEFAULT_MAPS
+    if (retry === 0) {
+      setTimeout(() => loadMaps(1), 1500)
+    }
   }
 }
 
@@ -305,6 +417,19 @@ onMounted(() => {
 
 .el-form-item {
   margin-bottom: 24px;
+}
+
+.upload-tip {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border: 1px solid #bae7ff;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.upload-tip .el-icon {
+  margin-right: 6px;
 }
 
 @media (max-width: 768px) {

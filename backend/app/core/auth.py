@@ -77,3 +77,12 @@ def authenticate_user(db: Session, username: str, password: str):
     if not verify_password(password, user.hashed_password):
         return False
     return user
+
+def get_admin_user(current_user: models.User = Depends(get_current_user)):
+    """获取管理员用户，非管理员抛出403"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限"
+        )
+    return current_user

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type { Material, MaterialResponse, Category } from '@/types'
 import type { LoginForm, RegisterForm, AuthResponse, User } from '@/types/auth'
+import type { AdminStats, AdminUser } from '@/types/admin'
 import config from '@/config/environment'
 
 const api = axios.create({
@@ -65,11 +66,8 @@ export const materialsApi = {
 
   // 上传素材
   uploadMaterial: (data: FormData): Promise<Material> => {
-    return api.post('/materials/upload', data, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
+  // 不能手动设置 multipart/form-data 头，否则 boundary 丢失导致后端解析不到字段 -> 422 Field required
+  return api.post('/materials/upload', data)
   },
 
   // 获取类别列表
@@ -100,5 +98,54 @@ export const authApi = {
   // 获取当前用户信息
   getCurrentUser: (): Promise<User> => {
     return api.get('/users/me')
+  }
+}
+
+// 管理员相关API
+export const adminApi = {
+  // 获取统计信息
+  getStats: (): Promise<AdminStats> => {
+    return api.get('/admin/stats')
+  },
+
+  // 获取待审核素材
+  getPendingMaterials: (params?: {
+    page?: number
+    size?: number
+  }): Promise<MaterialResponse> => {
+    return api.get('/admin/materials/pending', { params })
+  },
+
+  // 审核通过素材
+  approveMaterial: (id: number): Promise<{ message: string }> => {
+    return api.post(`/admin/materials/${id}/approve`)
+  },
+
+  // 拒绝素材
+  rejectMaterial: (id: number): Promise<{ message: string }> => {
+    return api.post(`/admin/materials/${id}/reject`)
+  },
+
+  // 删除素材
+  deleteMaterial: (id: number): Promise<{ message: string }> => {
+    return api.delete(`/admin/materials/${id}`)
+  },
+
+  // 获取用户列表
+  getUsers: (params?: {
+    page?: number
+    size?: number
+  }): Promise<AdminUser[]> => {
+    return api.get('/admin/users', { params })
+  },
+
+  // 切换用户激活状态
+  toggleUserActive: (id: number): Promise<{ message: string }> => {
+    return api.post(`/admin/users/${id}/toggle-active`)
+  },
+
+  // 切换用户管理员状态
+  toggleUserAdmin: (id: number): Promise<{ message: string }> => {
+    return api.post(`/admin/users/${id}/toggle-admin`)
   }
 }

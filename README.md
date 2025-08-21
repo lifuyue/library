@@ -55,104 +55,75 @@ library/
 
 ## 快速开始
 
-### 🚀 智能启动器 (推荐)
+### 环境要求
 
-使用交互式启动器，最简单的方式：
+- Python 3.8+
+- Node.js 16+
+- npm 或 yarn
+
+### 开发环境启动
+
+#### 方式一：Python启动脚本（推荐）
 
 ```bash
-# 激活虚拟环境 (如果还没激活)
+# 简单一键启动
+python dev.py
+```
+
+#### 方式二：批处理脚本
+
+**Windows:**
+```bash
+# 双击运行或在命令行中执行
+start-dev.bat
+```
+
+**Linux/Mac:**
+```bash
+# 给脚本执行权限并运行
+chmod +x start-dev.sh
+./start-dev.sh
+```
+
+#### 方式三：手动启动
+
+**1. 后端启动**
+
+```bash
+# 激活虚拟环境
 # Windows:
 .venv\Scripts\activate
 # Linux/Mac:
 source .venv/bin/activate
 
-# 运行智能启动器
-python dev_launcher.py
+# 安装依赖（首次运行）
+pip install -r backend/requirements.txt
+
+# 启动后端服务
+cd backend
+python run_server.py
 ```
 
-智能启动器提供以下选项：
-1. 🚀 启动完整开发环境 (前端 + 后端)
-2. 🔧 仅启动后端服务 (API + 数据库)  
-3. 🌐 仅启动前端服务 (Vue.js 应用)
-4. 🧹 清理端口占用
-5. 📖 查看启动说明
-
-### ⚡ 快速启动脚本
-
-如果你已经熟悉项目，可以直接使用以下脚本：
+**2. 前端启动**
 
 ```bash
-# Python脚本 (跨平台，推荐)
-python local_dev.py                    # 启动全部服务
-python local_dev.py --mode backend     # 仅启动后端
-python local_dev.py --mode frontend    # 仅启动前端
-python local_dev.py --clean           # 清理端口占用
+# 在新的终端窗口中
+cd frontend
 
-# Windows批处理
-start_local.bat                       # 启动全部服务
-start_local.bat --backend-only        # 仅启动后端
-start_local.bat --frontend-only       # 仅启动前端
+# 安装依赖（首次运行）
+npm install
 
-# Linux/Mac Shell脚本
-chmod +x start_local.sh
-./start_local.sh                      # 启动全部服务
-./start_local.sh --backend-only       # 仅启动后端
-./start_local.sh --frontend-only      # 仅启动前端
+# 启动前端开发服务器
+npm run dev
 ```
 
-### 🌐 访问地址
+### 访问地址
 
 启动成功后，你可以访问：
 
 - **前端应用**: http://localhost:3000
 - **后端API**: http://127.0.0.1:8000  
 - **API文档**: http://127.0.0.1:8000/docs
-- **健康检查**: http://127.0.0.1:8000/api/health
-
-### 📋 环境要求
-
-- Python 3.8+
-- Node.js 16+
-- npm 或 yarn
-
-### 后端启动
-
-1. 激活虚拟环境（如果已创建）:
-```bash
-# Windows
-.venv\Scripts\activate
-
-# macOS/Linux
-source .venv/bin/activate
-```
-
-2. 安装依赖（如果还未安装）:
-```bash
-pip install -r backend/requirements.txt
-```
-
-3. 启动后端服务:
-```bash
-cd backend
-python main.py
-```
-
-后端API将运行在 `http://localhost:8000`
-
-### 前端启动
-
-1. 安装依赖:
-```bash
-cd frontend
-npm install
-```
-
-2. 启动开发服务器:
-```bash
-npm run dev
-```
-
-前端应用将运行在 `http://localhost:3000`
 
 ## API文档
 

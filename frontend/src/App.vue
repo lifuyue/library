@@ -46,6 +46,10 @@ onMounted(() => {
             <el-icon><Upload /></el-icon>
             <span>上传素材</span>
           </el-menu-item>
+          <el-menu-item v-if="authStore.isAuthenticated && authStore.user?.is_admin" index="/admin">
+            <el-icon><Setting /></el-icon>
+            <span>管理面板</span>
+          </el-menu-item>
         </el-menu>
         
         <div class="user-actions">

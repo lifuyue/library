@@ -11,6 +11,7 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)  # 是否为管理员
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # 关联素材

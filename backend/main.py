@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-from app.core.database import get_db, engine
+from app.core.database import get_db, engine, DB_FILE
 from app.models import models
 from app.schemas import schemas
 from app.api import materials, users
@@ -40,12 +40,17 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.include_router(materials.router, prefix="/api/materials", tags=["materials"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 
+# 导入管理员路由
+from app.api import admin
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+
 @app.get("/")
 async def root():
     return {
         "message": "CS素材库 API 服务正在运行",
         "environment": settings.ENVIRONMENT,
-        "version": "1.0.0"
+    "version": "1.0.0",
+    "database_path": str(DB_FILE)
     }
 
 @app.get("/api/health")

@@ -51,7 +51,7 @@
           <el-card class="material-card" shadow="hover" @click="viewMaterial(material.id)">
             <div class="material-image">
               <img 
-                :src="material.thumbnail_path ? `/uploads/${material.thumbnail_path}` : '/placeholder.jpg'" 
+                :src="resolveThumb(material)" 
                 :alt="material.title"
                 @error="handleImageError"
               />
@@ -101,12 +101,28 @@ import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { materialsApi } from '@/api'
 import type { Material, Category } from '@/types'
+import config from '@/config/environment'
 
 const router = useRouter()
 const loading = ref(false)
 const materials = ref<Material[]>([])
 const categories = ref<Category[]>([])
 const maps = ref<string[]>([])
+
+// 本地回退常量
+const DEFAULT_CATEGORIES: Category[] = [
+  { value: 'smoke', label: '烟雾弹' },
+  { value: 'flash', label: '闪光弹' },
+  { value: 'he', label: '手雷' },
+  { value: 'molotov', label: '燃烧瓶' },
+  { value: 'position', label: '身位点位' },
+  { value: 'strategy', label: '战术策略' },
+  { value: 'other', label: '其他' }
+]
+const DEFAULT_MAPS: string[] = [
+  'dust2', 'mirage', 'inferno', 'cache', 'overpass',
+  'train', 'cobblestone', 'nuke', 'vertigo', 'ancient'
+]
 
 // 搜索和筛选
 const searchQuery = ref('')
@@ -149,9 +165,25 @@ const viewMaterial = (id: number) => {
   router.push(`/materials/${id}`)
 }
 
+// 占位符与首页保持一致
+const PLACEHOLDER = '/placeholder.jpg'
+
+// 缩略图解析函数（统一逻辑，避免路径差异）
+const resolveThumb = (m: Material): string => {
+  if (m.thumbnail_path) {
+    const p = m.thumbnail_path
+    if (p.startsWith('http://') || p.startsWith('https://')) return p
+    return `${config.UPLOAD_URL.replace(/\/$/, '')}/${p.replace(/^\//, '')}`
+  }
+  return PLACEHOLDER
+}
+
+// 防止无限 onerror 循环
 const handleImageError = (event: Event) => {
   const img = event.target as HTMLImageElement
-  img.src = '/placeholder.jpg'
+  if ((img as any)._fallbackApplied) return
+  ;(img as any)._fallbackApplied = true
+  img.src = PLACEHOLDER
 }
 
 const loadMaterials = async () => {
@@ -175,21 +207,33 @@ const loadMaterials = async () => {
   }
 }
 
-const loadCategories = async () => {
+const loadCategories = async (retry = 0) => {
   try {
     const response = await materialsApi.getCategories()
-    categories.value = response.categories
+    if (response?.categories?.length) {
+      categories.value = response.categories
+    } else {
+      throw new Error('empty categories response')
+    }
   } catch (error) {
-    console.error('Failed to load categories:', error)
+    console.warn('加载类别失败，使用本地回退:', error)
+    categories.value = DEFAULT_CATEGORIES
+    if (retry === 0) setTimeout(() => loadCategories(1), 1500)
   }
 }
 
-const loadMaps = async () => {
+const loadMaps = async (retry = 0) => {
   try {
     const response = await materialsApi.getMaps()
-    maps.value = response.maps
+    if (response?.maps?.length) {
+      maps.value = response.maps
+    } else {
+      throw new Error('empty maps response')
+    }
   } catch (error) {
-    console.error('Failed to load maps:', error)
+    console.warn('加载地图失败，使用本地回退:', error)
+    maps.value = DEFAULT_MAPS
+    if (retry === 0) setTimeout(() => loadMaps(1), 1500)
   }
 }
 

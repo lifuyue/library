@@ -1,12 +1,43 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-sqlalchemy==1.4.53
-alembic==1.12.1
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-decouple==3.8
-pillow>=10.3.0
-aiofiles==23.2.1
-pydantic==2.5.0
-email-validator==2.1.0.post1
+#############################################
+# Backend Runtime Dependencies (Flexible)
+# 说明: 为了兼容 Python 3.13，放宽版本上限，避免旧版本无 wheel 触发 Rust 编译。
+# 若需要绝对可重复，请生成锁文件:  pip install pip-tools && pip-compile --output-file requirements.lock.txt requirements.txt
+#############################################
+
+# Web 框架 & ASGI
+fastapi>=0.104,<0.112
+uvicorn[standard]>=0.24,<0.29
+
+# 数据与迁移
+sqlalchemy>=1.4.53,<2.1
+alembic>=1.12.1,<1.14
+
+# 认证 / 安全 / 加密
+python-jose[cryptography]>=3.3.0,<4.0
+passlib[bcrypt]>=1.7.4,<1.8
+python-multipart>=0.0.6,<0.0.9
+email-validator>=2.1.0,<2.2
+
+# 数据验证 (放宽以获取支持 Py3.13 的新 wheel)
+pydantic>=2.5.0,<3.0
+typing-extensions>=4.8.0,<5.0
+
+# 文件与异步 IO
+aiofiles>=23.2.1,<24.0
+Pillow>=10.1.0,<11.0
+
+# 配置/环境
+python-dotenv>=1.0.0,<2.0
+
+#############################################
+# 可选数据库驱动 (按需取消注释)
+# psycopg2-binary==2.9.9  # PostgreSQL
+# mysqlclient==2.2.4      # MySQL/MariaDB (需要系统库)
+#############################################
+
+# 开发/调试可在独立文件(如 requirements.dev.txt) 中维护:
+#   black, isort, mypy, pytest, httpx 等
+
+# 锁文件示例生成:
+#   pip install pip-tools
+#   pip-compile --output-file requirements.lock.txt requirements.txt

@@ -15,6 +15,13 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 
+from app.core.config import (
+    ADMIN_DEFAULT_USERNAME,
+    ADMIN_DEFAULT_EMAIL,
+    ADMIN_DEFAULT_PASSWORD,
+)
+from sqlalchemy.orm import Session
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
@@ -37,7 +44,15 @@ def _ensure_schema():
         print(f"[DB MIGRATION][WARN] Auto schema ensure failed: {e}")
 
 # 立即执行一次（在模型 create_all 之前 / 之后都可以，此处放在定义阶段）
-_ensure_schema()
+# NOTE: 自动 schema 修补已迁移到 Alembic migrations，移除运行时自动修改
+# _ensure_schema()
+
+# NOTE: 管理员自动创建已迁移到 Alembic migrations，移除运行时自动创建
+# def ensure_default_admin():
+#     """管理员创建逻辑已迁移到 Alembic migration 8d300e45b937_add_is_admin_column_and_seed_admin.py
+#     请使用: alembic upgrade head 来应用数据库迁移和创建默认管理员
+#     """
+#     pass
 
 # 数据库依赖
 def get_db():

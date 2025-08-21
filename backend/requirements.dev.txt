@@ -1,20 +1,24 @@
-# 开发/测试依赖（安装：pip install -r backend/requirements.dev.txt）
+############################################################
+# 开发 / 测试 叠加依赖
+# 安装： pip install -r backend/requirements.dev.txt
+# 说明： 引用 runtime requirements.txt，再追加工具类依赖
+############################################################
 -r requirements.txt
 
-# 代码质量
-black>=24.0,<25.0
+# 代码质量 / 静态检查
+black>=24.4,<25.0
 isort>=5.13,<6.0
-flake8>=7.0,<8.0
-mypy>=1.8,<2.0
+flake8>=7.1,<8.0
+mypy>=1.10,<1.11
 
-# 测试
-pytest>=8.1,<9.0
-httpx>=0.27,<0.28
+# 测试相关
+pytest>=8.3,<9.0
+httpx>=0.28,<0.29
 pytest-asyncio>=0.23,<0.24
 
-# 类型
+# 类型补充
 types-PyYAML
 
 # 交互调试
-ipython>=8.22,<9.0
+ipython>=8.25,<9.0
 

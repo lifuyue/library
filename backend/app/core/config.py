@@ -30,6 +30,11 @@ class Settings:
     # 环境配置
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
+    # 默认管理员（若数据库中不存在任何管理员账号会自动创建）
+    ADMIN_DEFAULT_USERNAME: str = os.getenv("ADMIN_DEFAULT_USERNAME", "admin")
+    ADMIN_DEFAULT_EMAIL: str = os.getenv("ADMIN_DEFAULT_EMAIL", "admin@example.com")
+    ADMIN_DEFAULT_PASSWORD: str = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
+
 settings = Settings()
 
 # 向后兼容的常量
@@ -40,3 +45,6 @@ DATABASE_URL = settings.DATABASE_URL
 UPLOAD_DIR = settings.UPLOAD_DIR
 MAX_FILE_SIZE = settings.MAX_FILE_SIZE
 ALLOWED_EXTENSIONS = settings.ALLOWED_EXTENSIONS
+ADMIN_DEFAULT_USERNAME = settings.ADMIN_DEFAULT_USERNAME
+ADMIN_DEFAULT_EMAIL = settings.ADMIN_DEFAULT_EMAIL
+ADMIN_DEFAULT_PASSWORD = settings.ADMIN_DEFAULT_PASSWORD

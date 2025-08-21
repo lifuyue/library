@@ -13,6 +13,8 @@ from app.api import materials, users
 from app.core.config import settings
 
 # 创建数据库表
+# NOTE: 管理员创建和 schema 修补现在通过 Alembic migrations 处理
+# 运行 'alembic upgrade head' 来应用迁移和创建默认管理员
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(

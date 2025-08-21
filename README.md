@@ -33,12 +33,16 @@
 ```
 library/
 ├── backend/                 # 后端 FastAPI 应用
+│   ├── alembic/            # 数据库迁移
+│   │   └── versions/       # 迁移版本文件
 │   ├── app/
 │   │   ├── api/            # API路由
 │   │   ├── core/           # 核心配置
 │   │   ├── models/         # 数据模型
 │   │   └── schemas/        # Pydantic模式
+│   ├── scripts/            # 实用脚本
 │   ├── uploads/            # 上传文件存储
+│   ├── alembic.ini         # Alembic配置
 │   ├── main.py            # 应用入口
 │   └── requirements.txt   # Python依赖
 ├── frontend/               # 前端 Vue 应用
@@ -63,29 +67,27 @@ library/
 
 ### 开发环境启动
 
-#### 方式一：Python启动脚本（推荐）
+#### 启动后端（方式一：run_server 脚本）
 
 ```bash
-# 简单一键启动
-python dev.py
+# Windows (PowerShell)
+python backend/run_server.py
 ```
 
-#### 方式二：批处理脚本
+#### 启动后端（方式二：直接运行 main.py）
 
-**Windows:**
 ```bash
-# 双击运行或在命令行中执行
-start-dev.bat
+python backend/main.py
 ```
 
-**Linux/Mac:**
+#### 启动后端（方式三：uvicorn 手动）
+
 ```bash
-# 给脚本执行权限并运行
-chmod +x start-dev.sh
-./start-dev.sh
+cd backend
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-#### 方式三：手动启动
+> 已移除旧的 dev.py / start-dev.* 脚本，改用更清晰的方式。
 
 **1. 后端启动**
 
@@ -99,8 +101,11 @@ source .venv/bin/activate
 # 安装依赖（首次运行）
 pip install -r backend/requirements.txt
 
-# 启动后端服务
+# 运行数据库迁移（首次运行或更新后）
 cd backend
+alembic upgrade head
+
+# 启动后端服务
 python run_server.py
 ```
 
@@ -124,6 +129,78 @@ npm run dev
 - **前端应用**: http://localhost:3000
 - **后端API**: http://127.0.0.1:8000  
 - **API文档**: http://127.0.0.1:8000/docs
+
+## 数据库迁移
+
+项目使用 **Alembic** 管理数据库 schema 变更，确保多环境一致性和可回滚性。
+
+### 首次设置或更新后
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+### 创建新迁移（开发时）
+
+```bash
+cd backend
+# 自动检测模型变更并生成迁移
+alembic revision --autogenerate -m "描述变更内容"
+# 手动检查生成的迁移文件
+# 应用迁移
+alembic upgrade head
+```
+
+### 常用命令
+
+```bash
+# 查看当前迁移状态
+alembic current
+
+# 查看迁移历史
+alembic history
+
+# 回滚到上一个版本
+alembic downgrade -1
+
+# 回滚到指定版本
+alembic downgrade <revision_id>
+```
+
+## 管理员账号说明
+
+## 管理员账号说明
+
+系统使用 **Alembic 迁移**自动创建默认管理员账户。运行 `alembic upgrade head` 时会检查并创建：
+
+- 用户名: `admin`
+- 密码: `admin123`
+- 邮箱: `admin@example.com`
+
+默认值可通过环境变量覆盖：
+
+```
+ADMIN_DEFAULT_USERNAME=admin
+ADMIN_DEFAULT_EMAIL=admin@example.com
+ADMIN_DEFAULT_PASSWORD=admin123
+```
+
+### 重置 / 修改管理员
+
+提供了脚本 `backend/scripts/reset_admin.py`：
+
+```bash
+python backend/scripts/reset_admin.py --force --password 新密码123
+```
+
+参数：
+- `--username` 覆盖用户名（默认取环境变量或 admin）
+- `--email` 覆盖邮箱
+- `--password` 设定新密码
+- `--force` 若已存在则强制更新密码/邮箱/权限
+
+**安全提示**：生产环境务必修改默认密码，并设置强随机 `SECRET_KEY`。
 
 ## API文档
 
@@ -160,6 +237,7 @@ npm run dev
 - email: 邮箱
 - hashed_password: 加密密码
 - is_active: 是否激活
+- is_admin: 是否管理员
 - created_at: 创建时间
 
 ### 素材表 (materials)

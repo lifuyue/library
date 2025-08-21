@@ -1,43 +1,42 @@
 #############################################
-# Backend Runtime Dependencies (Flexible)
-# 说明: 为了兼容 Python 3.13，放宽版本上限，避免旧版本无 wheel 触发 Rust 编译。
-# 若需要绝对可重复，请生成锁文件:  pip install pip-tools && pip-compile --output-file requirements.lock.txt requirements.txt
+# Backend Runtime Dependencies (Consolidated)
+# 策略:
+#  1. 使用兼容 Python 3.13 的上游最新稳定次版本范围。
+#  2. 保持适度上限(< 下一个潜在破坏性主/次版本) 以减少破坏性升级风险。
+#  3. 若需完全可复现，可生成锁文件:  pip install pip-tools && pip-compile -o requirements.lock.txt requirements.txt
 #############################################
 
 # Web 框架 & ASGI
-fastapi>=0.104,<0.112
-uvicorn[standard]>=0.24,<0.29
+fastapi>=0.111,<0.112
+uvicorn[standard]>=0.28,<0.29
 
-# 数据与迁移
-sqlalchemy>=1.4.53,<2.1
-alembic>=1.12.1,<1.14
+# ORM & 迁移
+SQLAlchemy>=2.0.43,<2.1
+alembic>=1.13.3,<1.14
 
-# 认证 / 安全 / 加密
-python-jose[cryptography]>=3.3.0,<4.0
+# 认证 / 安全 / 上传
+python-jose[cryptography]>=3.5.0,<3.6
 passlib[bcrypt]>=1.7.4,<1.8
-python-multipart>=0.0.6,<0.0.9
-email-validator>=2.1.0,<2.2
+python-multipart>=0.0.8,<0.0.9
+email-validator>=2.1.2,<2.2
 
-# 数据验证 (放宽以获取支持 Py3.13 的新 wheel)
-pydantic>=2.5.0,<3.0
-typing-extensions>=4.8.0,<5.0
+# 数据验证 / 类型
+pydantic>=2.11.0,<2.12
+typing-extensions>=4.14.0,<5.0
 
 # 文件与异步 IO
 aiofiles>=23.2.1,<24.0
-Pillow>=10.1.0,<11.0
+Pillow>=10.4.0,<10.5
 
-# 配置/环境
-python-dotenv>=1.0.0,<2.0
+# 配置
+python-dotenv>=1.1.0,<1.2
 
-#############################################
 # 可选数据库驱动 (按需取消注释)
-# psycopg2-binary==2.9.9  # PostgreSQL
-# mysqlclient==2.2.4      # MySQL/MariaDB (需要系统库)
+# psycopg2-binary>=2.9.9,<2.10  # PostgreSQL
+# mysqlclient>=2.2.4,<2.3       # MySQL/MariaDB (需要系统库)
+
 #############################################
-
-# 开发/调试可在独立文件(如 requirements.dev.txt) 中维护:
-#   black, isort, mypy, pytest, httpx 等
-
-# 锁文件示例生成:
+# 生成锁文件 (可重复部署):
 #   pip install pip-tools
-#   pip-compile --output-file requirements.lock.txt requirements.txt
+#   pip-compile -o requirements.lock.txt requirements.txt
+#############################################

@@ -31,8 +31,8 @@ Pillow>=10.4.0,<10.5
 # 配置
 python-dotenv>=1.1.0,<1.2
 
-# 可选数据库驱动 (按需取消注释)
-# psycopg2-binary>=2.9.9,<2.10  # PostgreSQL
+# 数据库驱动
+psycopg[binary]>=3.1.18,<3.2    # PostgreSQL (v3 驱动, 取代 psycopg2-binary)
 # mysqlclient>=2.2.4,<2.3       # MySQL/MariaDB (需要系统库)
 
 #############################################

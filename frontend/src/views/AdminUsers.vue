@@ -16,7 +16,7 @@
 
       <!-- 用户表格 -->
       <div class="users-table" v-loading="loading">
-        <el-table :data="users" stripe>
+        <el-table :data="users" stripe @row-click="onRowClick">
           <el-table-column prop="id" label="ID" width="80" />
           <el-table-column prop="username" label="用户名" min-width="120" />
           <el-table-column prop="email" label="邮箱" min-width="200" />
@@ -198,10 +198,15 @@ const toggleUserAdmin = async (user: AdminUser) => {
   }
 }
 
-// 查看用户详情
+// 查看用户详情（由行点击触发）
 const viewUserDetail = (user: AdminUser) => {
   selectedUser.value = user
   detailVisible.value = true
+}
+
+// 表格行点击事件适配 Element Plus (@row-click 传入 row)
+const onRowClick = (row: AdminUser) => {
+  viewUserDetail(row)
 }
 
 onMounted(() => {

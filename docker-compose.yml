@@ -1,0 +1,52 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cs-postgres
+    environment:
+      - POSTGRES_DB=cs_library
+      - POSTGRES_USER=cs_user
+      - POSTGRES_PASSWORD=cs_password
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cs_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.backend
+    container_name: cs-backend
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://cs_user:cs_password@db:5432/cs_library
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cs-frontend
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  uploads_data:

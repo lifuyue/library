@@ -1,31 +1,37 @@
-# 后端 Dockerfile
-FROM python:3.11-slim
+### 后端生产镜像 Dockerfile（改进版）
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-    gcc \
+# 仅安装必要系统依赖：gcc (构建可能需要) + curl (健康检查)。后续如用 psycopg 可加 libpq-dev。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
-COPY backend/requirements.txt .
+# 先复制依赖文件以利用缓存层
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir -r requirements.txt
+# 复制后端源代码（含 alembic 配置）
+COPY backend/ ./
 
-# 复制应用代码
-COPY backend/ .
+# 创建运行期目录（上传目录）
+RUN mkdir -p /app/uploads
 
-# 创建上传目录
-RUN mkdir -p uploads
-
-# 暴露端口
+# 暴露端口（说明性）
 EXPOSE 8000
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
+# 健康检查（依赖 curl）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -fsS http://localhost:8000/api/health || exit 1
 
-# 启动命令
-CMD ["python", "main.py"]
+# 默认启动：执行迁移 + 启动 gunicorn(uvicorn worker)
+# 可用环境变量 APP_WORKERS 覆盖并发数。
+ENV APP_WORKERS=2
+CMD ["bash", "-c", "alembic upgrade head && gunicorn -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8000 --workers ${APP_WORKERS} --timeout 60"]

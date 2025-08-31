@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  # PostgreSQL 数据库服务
+  db:
+    image: postgres:16-alpine
+    container_name: cs-library-postgres
+    env_file:
+      - .env.deploy
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   # 后端服务
   backend:
     build:
@@ -9,20 +28,13 @@ services:
     container_name: cs-library-backend
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=sqlite:///./cs_library.db
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-here}
-      - ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
-      - REFRESH_TOKEN_EXPIRE_DAYS=7
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:80
-      - UPLOAD_DIR=uploads
-      - HOST=0.0.0.0
-      - PORT=8000
-      - ENVIRONMENT=production
+    env_file:
+      - .env.deploy
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - backend_uploads:/app/uploads
-      - backend_db:/app
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
@@ -50,7 +62,7 @@ services:
 volumes:
   backend_uploads:
     driver: local
-  backend_db:
+  pg_data:
     driver: local
 
 networks:

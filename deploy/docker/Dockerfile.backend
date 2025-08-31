@@ -7,10 +7,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 仅安装必要系统依赖：gcc (构建可能需要) + curl (健康检查)。后续如用 psycopg 可加 libpq-dev。
+# 安装系统依赖：gcc (构建) + curl (健康检查) + libpq-dev (PostgreSQL 客户端库)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       gcc curl \
+       gcc curl libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 先复制依赖文件以利用缓存层
@@ -22,7 +22,7 @@ RUN pip install --upgrade pip setuptools wheel \
 COPY backend/ ./
 
 # 创建运行期目录（上传目录）
-RUN mkdir -p /app/uploads
+RUN mkdir -p /app/uploads /app/data
 
 # 暴露端口（说明性）
 EXPOSE 8000

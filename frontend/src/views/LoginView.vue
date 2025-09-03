@@ -91,7 +91,9 @@ const form = reactive({
   confirmPassword: ''
 })
 
-const validateConfirmPassword = (rule: any, value: string, callback: any) => {
+// 自定义校验：确认密码与密码一致
+// 第一个 rule 参数未使用，为避免 TS6133 未使用参数告警，使用下划线前缀
+const validateConfirmPassword = (_rule: any, value: string, callback: any) => {
   if (value !== form.password) {
     callback(new Error('两次输入的密码不一致'))
   } else {

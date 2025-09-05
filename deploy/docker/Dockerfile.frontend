@@ -1,22 +1,18 @@
 # 前端 Dockerfile
-FROM node:18-alpine AS builder
+FROM node:lts-slim AS builder
 
 WORKDIR /app
 
-# 复制 package 文件
-COPY frontend/package*.json ./
-
-# 安装依赖
-RUN npm ci
-
-# 复制源代码
-COPY frontend/ .
-
-# 构建生产版本
+ENV NODE_ENV=production
+# 仅复制依赖声明文件以提升缓存命中
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --prefer-offline --no-audit --loglevel=error
+# 复制源代码并构建
+COPY frontend/ ./
 RUN npm run build
 
 # 生产阶段
-FROM nginx:alpine
+FROM nginx:stable-alpine
 
 # 复制构建结果
 COPY --from=builder /app/dist /usr/share/nginx/html

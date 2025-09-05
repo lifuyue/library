@@ -45,6 +45,8 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.db
+*.db-*
+*.sqlite*
 
 # Testing and coverage
 .pytest_cache
@@ -52,6 +54,9 @@ Thumbs.db
 htmlcov
 .tox
 .cache
+tests
+test
+*.lock
 
 # Documentation
 *.md

@@ -30,6 +30,8 @@ services:
       - "8000:8000"
     env_file:
       - .env.deploy
+    environment:
+      - APP_WORKERS=${APP_WORKERS:-2}
     depends_on:
       db:
         condition: service_healthy

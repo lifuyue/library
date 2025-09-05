@@ -1,236 +1,73 @@
-# GoLibrary .gitignore
-# Python bytecode and cache (更全面的匹配)
+### Consolidated .gitignore
+# Python
 __pycache__/
-*/__pycache__/
 **/__pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.pyc
-.Python
-env/
 .venv/
 venv/
-# 递归忽略各级目录下的虚拟环境（之前只忽略仓库根目录同名目录）
+env/
 **/.venv/
 **/venv/
 **/env/
+pip-wheel-metadata/
+*.egg-info/
+__pypackages__/
+
+# Env & local DBs
 *.env
-*.sqlite3
-*.db
-# Node
+.env.local
+.env.*.local
+*.sqlite*
+*.db*
+materials.db
+backend/*.db
+backend/*.sqlite*
+
+# Node / Frontend
 node_modules/
+**/node_modules/
 dist/
 build/
+frontend/dist/
+frontend/.output/
+public/build/
 .vite/
 **/.vite/
 .cache/
 **/.cache/
-.eslintcache
+.pnpm-store/
+.turbo/
+.parcel-cache/
 *.tsbuildinfo
 *.tsbuildinfo.*
-coverage/
-.env.local
-.env.*.local
+.eslintcache
+
 # Logs
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-# Editor
+
+# Editors / OS
 .vscode/
 .idea/
 *.sublime-workspace
 *.sublime-project
 .DS_Store
-# OS
 Thumbs.db
-ehthumbs.db
-############################################################
-# Runtime data (do NOT commit)
-#  - Uploaded files (kept out of history; only .gitkeep stays)
-#  - Local SQLite databases generated at runtime
-############################################################
 
-# Uploaded media (更强匹配规则 - 使用绝对路径模式)
+# Uploads (keep .gitkeep)
 /backend/uploads/*
 !/backend/uploads/.gitkeep
 /uploads/*
 !/uploads/.gitkeep
 
-# SQLite databases (覆盖所有可能位置)
-*.sqlite
-*.sqlite3
-*.db
-/materials.db
-/backend/materials.db
-
-# Test/coverage caches
-.pytest_cache/
-.mypy_cache/
-.coverage*
-coverage-html/
-
-# Local tooling artifacts
-*.pid
-*.lock
-# Frontend
-frontend/dist/
-# Python cache and packaging
-pip-wheel-metadata/
-*.egg-info/
-
-# Frontend framework temp (Vue/Vite/工具链)
-frontend/.vite/
-frontend/.cache/
-frontend/coverage/
-frontend/*.tsbuildinfo
-frontend/*.tsbuildinfo.*
-frontend/.eslintcache
-
-# Shell / PowerShell helper scripts generated inside node_modules (already covered by node_modules/, keep explicit for safety if copied out)
-*.ps1
-
-# Local SQLite/runtime DB (ensure全部忽略)
-backend/*.db
-backend/*.sqlite*
-*.db*
-
-############################################################
-# Additional common ignores: frontend builds, docker artifacts,
-# and extra Python caches / packaging leftovers
-############################################################
-
-# Generic build output directories (catch-all)
-/**/dist/
-/dist/
-/build/
-
-# Frontend specific build outputs
-frontend/dist/
-frontend/.output/
-public/build/
-
-# Framework-specific outputs
-.next/
-.nuxt/
-/.vercel/
-/.parcel-cache/
-
-# Source maps / bundled artefacts
-*.map
-*.bundle.js
-
-# Node dependency folders (ensure any level)
-node_modules/
-**/node_modules/
-
-# Common caches for JS toolchains
-.pnpm-store/
-.turbo/
-.cache/
-.parcel-cache/
-
-# npm/yarn/pnpm logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Docker local helpers / overrides
+# Docker
 docker-compose.override.yml
 docker-compose.*.local.yml
 .docker/
-
-# Docker build artifacts that may be generated locally
 docker-image-*.tar
 *.tar.gz
-
-# Python bytecode & caches (extra coverage)
-**/__pycache__/
-**/*.py[cod]
-**/*.pyc
-*.pyc
-*.pyo
-*.pyd
-
-# Test/type caches (already had some, repeat to be safe)
-.pytest_cache/
-.mypy_cache/
-.coverage
-coverage-html/
-
-# Packaging artifacts
-pip-wheel-metadata/
-*.egg-info/
-__pypackages__/
-
-# ---- Core ignore rules (精简保证生效) ----
-# Python
-__pycache__/
-**/__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.pyc
-.venv/
-env/
-venv/
-**/.venv/
-**/env/
-**/venv/
-
-# Environment / local databases
-*.env
-*.sqlite*
-*.db
-
-# Frontend build + deps
-frontend/dist/
-frontend/node_modules/
-dist/
-node_modules/
-**/node_modules/
-
-# Vite / tool caches
-.vite/
-**/.vite/
-.cache/
-**/.cache/
-*.tsbuildinfo
-*.tsbuildinfo.*
-.eslintcache
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Editor / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Coverage / test caches
-coverage/
-.pytest_cache/
-.mypy_cache/
-.coverage*
-coverage-html/
-
-# Docker local overrides
-docker-compose.override.yml
-docker-compose.*.local.yml
-
-# Uploads (保留占位文件)
-backend/uploads/*
-!backend/uploads/.gitkeep
-uploads/*
-!uploads/.gitkeep
-
-
-backend.tar
-DockerDesktop/Docker.raw
-frontend.tar
+*.tar
+docker.raw

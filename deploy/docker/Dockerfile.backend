@@ -1,47 +1,38 @@
-### 后端生产镜像 Dockerfile（改进版）
+### 后端生产镜像 Dockerfile（多阶段更瘦身）
+
+# 1) Builder：仅用于构建 wheels（启用 BuildKit pip 缓存）
+FROM python:3.11-slim AS builder
+ENV PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
+WORKDIR /build
+COPY backend/requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip wheel setuptools && \
+    pip wheel --wheel-dir /wheels -r requirements.txt
+
+# 2) Runtime：仅包含运行所需（使用 psycopg[binary] 无需 libpq-dev/gcc）
 FROM python:3.11-slim AS runtime
-
-ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PYTHONDONTWRITEBYTECODE=1
-
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# 安装系统依赖：使用阿里云 Debian 镜像加速 (gcc / curl / libpq-dev)，失败回退官方源
-RUN set -eux; \
-    codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"; \
-    echo "Using Debian codename: $codename"; \
-    { \
-      echo "deb https://mirrors.aliyun.com/debian/ ${codename} main contrib non-free non-free-firmware"; \
-      echo "deb https://mirrors.aliyun.com/debian/ ${codename}-updates main contrib non-free non-free-firmware"; \
-      echo "deb https://mirrors.aliyun.com/debian/ ${codename}-backports main contrib non-free non-free-firmware"; \
-      echo "deb https://mirrors.aliyun.com/debian-security/ ${codename}-security main contrib non-free non-free-firmware"; \
-    } > /etc/apt/sources.list; \
-    apt-get update; \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        gcc curl libpq-dev; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# 仅从 wheels 安装依赖（无编译）
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir /wheels/*
 
-# 先复制依赖文件以利用缓存层
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir -r requirements.txt
+# 拷贝应用源码（含 alembic）
+COPY backend/ /app/
 
-# 复制后端源代码（含 alembic 配置）
-COPY backend/ ./
+# 安全：非 root 用户
+RUN groupadd -r app && useradd -r -g app app && \
+    mkdir -p /app/uploads /app/data && \
+    chown -R app:app /app
+USER app
 
-# 创建运行期目录（上传目录）
-RUN mkdir -p /app/uploads /app/data
-
-# 暴露端口（说明性）
 EXPOSE 8000
-
-# 健康检查（依赖 curl）
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -fsS http://localhost:8000/api/health || exit 1
 
-# 默认启动：执行迁移 + 启动 gunicorn(uvicorn worker)
-# 可用环境变量 APP_WORKERS 覆盖并发数。
+# 生产启动：迁移 + gunicorn(uvicorn worker)
 ENV APP_WORKERS=2
-CMD ["bash", "-c", "alembic upgrade head && gunicorn -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8000 --workers ${APP_WORKERS} --timeout 60"]
+CMD ["bash","-c","alembic upgrade head && gunicorn -k uvicorn.workers.UvicornWorker -w ${APP_WORKERS} -b 0.0.0.0:8000 main:app --timeout 60"]

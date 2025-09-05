@@ -1,6 +1,7 @@
 # Project Makefile — convenience commands for dev and prod
 
 SHELL := /bin/bash
+COMPOSE_STACK := deploy/docker/docker-compose.yml
 
 COMPOSE_DEV := docker-compose.dev.yml
 COMPOSE_PROD := docker-compose.prod.yml
@@ -22,6 +23,10 @@ help:
 	@echo "  make prod-logs      # Tail prod logs"
 	@echo "  make check-backend  # Quick Python syntax check"
 	@echo "  make build-frontend # Local frontend build"
+	@echo "  make docker-build   # Build backend+frontend images"
+	@echo "  make docker-up      # Up stack (detached)"
+	@echo "  make docker-down    # Down stack"
+	@echo "  make docker-logs    # Tail stack logs"
 	@echo "  make clean          # Remove containers, networks, volumes"
 
 # ----- Development -----
@@ -71,23 +76,23 @@ prod-logs:
 check-backend:
 	@echo "Python syntax check (backend)"
 	@python - <<'PY'
-import os, sys
-roots = ['backend']
-files = []
-for root in roots:
-	for dp, _, fn in os.walk(root):
-		for f in fn:
-			if f.endswith('.py'):
-				files.append(os.path.join(dp, f))
-ok = True
-for f in files:
-	try:
-		compile(open(f, 'rb').read(), f, 'exec')
-	except Exception as e:
-		ok = False
-		print(f"Syntax error in {f}: {e}")
-sys.exit(0 if ok else 1)
-PY
+	import os, sys
+	roots = ['backend']
+	files = []
+	for root in roots:
+		for dp, _, fn in os.walk(root):
+			for f in fn:
+				if f.endswith('.py'):
+					files.append(os.path.join(dp, f))
+	ok = True
+	for f in files:
+		try:
+			compile(open(f, 'rb').read(), f, 'exec')
+		except Exception as e:
+			ok = False
+			print(f"Syntax error in {f}: {e}")
+	sys.exit(0 if ok else 1)
+	PY
 
 build-frontend:
 	cd frontend && npm run build
@@ -100,3 +105,12 @@ clean:
 	@echo "Removing prod containers, networks, and volumes..."
 	docker compose -f $(COMPOSE_PROD) down -v || true
 
+.PHONY: docker-build docker-up docker-down docker-logs
+docker-build:
+	docker compose -f $(COMPOSE_STACK) build
+docker-up:
+	docker compose -f $(COMPOSE_STACK) up -d
+docker-down:
+	docker compose -f $(COMPOSE_STACK) down
+docker-logs:
+	docker compose -f $(COMPOSE_STACK) logs -f --tail=200

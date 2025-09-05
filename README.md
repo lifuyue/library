@@ -96,6 +96,22 @@ make prod-down
 
 更多命令请运行 `make help` 查看。
 
+新增一键 Docker 命令：
+
+```bash
+make docker-build && make docker-up
+# 查看日志 / 停止
+make docker-logs
+make docker-down
+```
+
+Windows 用户指南（不再提供 .bat/.cmd）：
+- 使用 WSL 或 Git Bash 执行上述命令；
+- 或在 PowerShell 中等价运行：
+  - 后端开发：`python -m uvicorn backend.main:app --reload`
+  - 前端开发：`cd frontend; npm run dev`
+  - Docker：`docker compose -f deploy/docker/docker-compose.yml up -d`
+
 ### 开发环境启动
 
 #### 启动后端（方式一：run_server 脚本）
@@ -160,6 +176,19 @@ npm run dev
 - **前端应用**: http://localhost:3000
 - **后端API**: http://127.0.0.1:8000  
 - **API文档**: http://127.0.0.1:8000/docs
+
+### 环境变量说明（节选）
+
+- `SECRET_KEY`：JWT 密钥（必改）
+- `ALGORITHM`：JWT 算法（默认 HS256）
+- `ACCESS_TOKEN_EXPIRE_MINUTES`：令牌过期（默认 60）
+- `UPLOAD_DIR`：上传目录（默认 `uploads`，Compose 映射为命名卷）
+- `MAX_FILE_SIZE`：上传大小限制（默认 50MB）
+
+### 健康检查
+
+- 后端：`GET /api/health` 返回 200
+- Docker Compose 内置 `healthcheck`，容器会等待依赖就绪
 
 ## 数据库迁移
 

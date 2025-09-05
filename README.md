@@ -25,7 +25,7 @@
 - **FastAPI** - 现代、快速的Python Web框架
 - **SQLAlchemy** - Python SQL工具包和ORM
 - **Alembic** - 数据库迁移工具
-- **SQLite** - 轻量级数据库
+- **PostgreSQL** - 关系型数据库
 - **Uvicorn** - ASGI服务器
 
 ## 项目结构
@@ -64,6 +64,30 @@ library/
 - Python 3.8+
 - Node.js 16+
 - npm 或 yarn
+
+### 配置环境变量
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+### Docker Compose 启动（PostgreSQL）
+
+```bash
+# 构建并启动全部服务
+docker compose up -d --build
+
+# 或使用 Makefile
+make dev-build
+```
+
+首次启动时容器会等待数据库就绪并执行 `alembic upgrade head`，确保表结构与默认管理员存在。通过日志查看迁移结果：
+
+```bash
+docker compose logs -f backend
+```
+
+应用启动后可访问 `http://localhost:8000/api/health` 进行检查。
 
 ### 使用 Makefile（推荐）
 
@@ -339,8 +363,14 @@ python backend/scripts/reset_admin.py --force --password 新密码123
 ### 生产环境
 - 后端：使用 Gunicorn 或 Uvicorn 部署
 - 前端：`npm run build` 后部署静态文件
-- 数据库：可切换到 PostgreSQL 或 MySQL
+- 数据库：使用 PostgreSQL
 - 文件存储：可配置对象存储服务
+
+## 常见问题
+
+- 数据库连接失败：确认 `.env` 中的 `DATABASE_URL` 与 Compose 配置一致，并确保 `db` 服务健康。
+- 权限问题：卷挂载目录需具备读写权限。
+- 重复迁移：若 `alembic` 报错，检查并清理 `alembic_version` 表后重试。
 
 ## 贡献指南
 

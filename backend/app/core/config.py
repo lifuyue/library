@@ -1,6 +1,5 @@
 import os
 from typing import List
-from datetime import timedelta
 
 class Settings:
     # JWT 配置
@@ -9,8 +8,10 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
-    # 数据库配置
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./cs_library.db")
+    # 数据库配置（仅支持 PostgreSQL）
+    # 必须通过环境变量 DATABASE_URL 提供，格式：
+    # 同步: postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
 
     # CORS配置
     CORS_ORIGINS: List[str] = os.getenv(
@@ -36,6 +37,9 @@ class Settings:
     ADMIN_DEFAULT_PASSWORD: str = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
 
 settings = Settings()
+
+if not settings.DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 # 向后兼容的常量
 SECRET_KEY = settings.SECRET_KEY

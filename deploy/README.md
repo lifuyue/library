@@ -73,10 +73,10 @@ docker-compose up --build
 
 ## 环境变量配置
 
-### 后端环境变量
+### 后端环境变量（PostgreSQL only）
 ```env
-# 数据库
-DATABASE_URL=sqlite:///./cs_library.db
+# 数据库（同步栈; psycopg 驱动）
+DATABASE_URL=postgresql+psycopg://app:app@postgresql:5432/cslibrary
 
 # JWT 安全
 SECRET_KEY=your-very-secure-secret-key
@@ -113,7 +113,7 @@ VITE_API_BASE_URL=https://your-backend.com
 - Docker：`docker-compose logs -f`
 
 ### 数据备份
-- SQLite 数据库文件：定期备份
+- PostgreSQL：使用 pg_dump 备份
 - 上传文件：定期备份 uploads 目录
 
 ## 扩展升级
@@ -129,7 +129,6 @@ VITE_API_BASE_URL=https://your-backend.com
 - 使用 CDN 加速静态资源
 - 启用 Gzip 压缩
 - 配置缓存策略
-- 考虑使用 PostgreSQL 替代 SQLite
 
 ## 故障排除
 

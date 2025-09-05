@@ -55,6 +55,18 @@ sh-backend:
 sh-frontend:
 	docker compose -f $(COMPOSE_DEV) exec frontend sh
 
+# ----- Database Utilities -----
+.PHONY: db-up db-migrate db-upgrade
+
+db-up:
+	docker compose -f $(COMPOSE_DEV) up -d db
+
+db-migrate:
+	docker compose -f $(COMPOSE_DEV) exec backend alembic revision --autogenerate -m "$(m)"
+
+db-upgrade:
+	docker compose -f $(COMPOSE_DEV) exec backend alembic upgrade head
+
 # ----- Production -----
 .PHONY: prod-up prod-build prod-down prod-logs
 

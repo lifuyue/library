@@ -33,6 +33,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD sh -c "wget -qO- http://localhost:8000/api/health || curl -fsS http://localhost:8000/api/health"
 
-# 生产启动：若无表则初始化，再迁移 + gunicorn(uvicorn worker)
+# 生产启动：Alembic 迁移后启动（禁止 ORM 自动建表）
 ENV APP_WORKERS=2
-CMD ["bash","-c","python -c 'from app.core.database import engine; from app.models.models import Base; Base.metadata.create_all(bind=engine)' && alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${APP_WORKERS}"]
+CMD ["bash","-c","alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${APP_WORKERS}"]

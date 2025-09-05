@@ -1,58 +1,30 @@
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from pathlib import Path
 from app.core.config import settings
 
-"""数据库初始化逻辑
+"""数据库初始化（PostgreSQL only）
 
-改进点:
-1. 不再硬编码为 SQLite, 统一使用环境变量 settings.DATABASE_URL
-2. 若是 SQLite 相对路径 -> 转换为项目根下绝对路径, 避免因工作目录不同生成多个副本
-3. 兼容 Postgres / 其它 SQLAlchemy URL (无需额外 connect_args)
-4. 暴露 DB_FILE (仅对 SQLite 生效, 供 / 根路由调试显示)
+要求：环境变量 DATABASE_URL 必须存在，格式：
+  postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
+不再支持 SQLite，移除所有相关兼容逻辑。
 """
 
-RAW_DATABASE_URL = settings.DATABASE_URL
-DB_FILE = None  # 仅在使用 SQLite 文件时赋值
+SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL.strip()
+if not SQLALCHEMY_DATABASE_URL:
+    raise RuntimeError("DATABASE_URL is required (e.g., postgresql+psycopg://user:pass@host:5432/db)")
 
-def _normalize_sqlite_url(url: str) -> str:
-    if not url.startswith("sqlite"):
-        return url
-    # 形如 sqlite:///materials.db 或 sqlite:///./cs_library.db
-    prefix = "sqlite:///"
-    if url.startswith(prefix):
-        path_part = url[len(prefix):]
-        # 内存数据库 / URI 形式不改
-        if path_part in (":memory:", "") or path_part.startswith("/"):
-            return url  # 已是绝对路径或内存
-        # 相对路径 -> 放置到 backend 根目录(当前文件的上两级目录)
-        base_dir = Path(__file__).resolve().parents[2]
-        abs_path = (base_dir / path_part).resolve()
-        return f"sqlite:///{abs_path.as_posix()}"
-    return url
+url_obj = make_url(SQLALCHEMY_DATABASE_URL)
+if url_obj.drivername not in {"postgresql+psycopg", "postgresql+asyncpg"}:
+    raise RuntimeError("DATABASE_URL must use postgresql+psycopg (or postgresql+asyncpg if async stack)")
 
-SQLALCHEMY_DATABASE_URL = _normalize_sqlite_url(RAW_DATABASE_URL)
+engine = create_engine(url_obj, pool_pre_ping=True, future=True)
 
-if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
-    # 提取文件路径用于调试显示
-    try:
-        path_part = SQLALCHEMY_DATABASE_URL.replace("sqlite:///", "", 1)
-        if path_part not in (":memory:", ""):
-            # 绝对路径
-            DB_FILE = Path(path_part)
-    except Exception:
-        DB_FILE = None
+safe_url = url_obj.render_as_string(hide_password=True)
+print(f"[DB INIT] URL={safe_url}")
 
-connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
-
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
-
-print(f"[DB INIT] URL={SQLALCHEMY_DATABASE_URL}")
-if DB_FILE:
-    print(f"[DB INIT] SQLite file: {DB_FILE}")
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 Base = declarative_base()
 
 # FastAPI 依赖

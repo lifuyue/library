@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Query, Form
 import traceback
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 import os
 import uuid
@@ -12,6 +13,7 @@ from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models import models
 from app.schemas import schemas
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -60,10 +62,13 @@ async def get_materials(
         if map_name:
             query = query.filter(models.Material.map_name == map_name)
         if search:
+            pattern = f"%{search}%"
             query = query.filter(
-                models.Material.title.contains(search) |
-                models.Material.description.contains(search) |
-                models.Material.tags.contains(search)
+                or_(
+                    models.Material.title.ilike(pattern),
+                    models.Material.description.ilike(pattern),
+                    models.Material.tags.ilike(pattern),
+                )
             )
 
         total = query.count()
@@ -129,13 +134,12 @@ async def upload_material(
     unique_filename = f"{uuid.uuid4()}{file_ext}"
     # 与 main.py 中的 UPLOAD_DIR 保持一致
     base_dir = Path(__file__).resolve().parents[2]  # 到 backend 目录
-    upload_dir = base_dir / "uploads"
+    upload_dir = base_dir / settings.UPLOAD_DIR
     upload_dir.mkdir(parents=True, exist_ok=True)
     relative_name = unique_filename
     file_path = upload_dir / relative_name
     
-    # 确保上传目录存在
-    os.makedirs("uploads", exist_ok=True)
+    # 目录已按 settings 创建，不再重复
     
     # 保存文件
     async with aiofiles.open(file_path, 'wb') as f:

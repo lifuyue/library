@@ -1,21 +1,17 @@
-from fastapi import FastAPI, File, UploadFile, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-import os
 from pathlib import Path
 from datetime import datetime
 
-from app.core.database import get_db, engine, DB_FILE
-from app.models import models
-from app.schemas import schemas
+from app.core.database import get_db
+import logging
 from app.api import materials, users
 from app.core.config import settings
 
-# 创建数据库表
-# NOTE: 管理员创建和 schema 修补现在通过 Alembic migrations 处理
-# 运行 'alembic upgrade head' 来应用迁移和创建默认管理员
-models.Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
+logger.warning("Database schema is managed by Alembic migrations. Run 'alembic upgrade head' before starting the app.")
 
 app = FastAPI(
     title="CS素材库 API",
@@ -51,9 +47,16 @@ async def root():
     return {
         "message": "CS素材库 API 服务正在运行",
         "environment": settings.ENVIRONMENT,
-    "version": "1.0.0",
-    "database_path": str(DB_FILE)
+        "version": "1.0.0",
     }
+
+@app.get("/api/health/db")
+async def health_check_db(db: Session = Depends(get_db)):
+    try:
+        db.execute("SELECT 1")
+        return {"status": "healthy"}
+    except Exception:
+        raise HTTPException(status_code=500, detail="database not available")
 
 @app.get("/api/health")
 async def health_check():

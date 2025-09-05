@@ -21,7 +21,7 @@ count "find . -type d -name __pycache__"   "__pycache__ dirs" || true
 count "find . -type f -name '*.py[co]'"    "py[co] files" || true
 count "find . -type f -name '*.tsbuildinfo*'" "tsbuildinfo" || true
 count "find . -type f -name '.eslintcache'"  ".eslintcache" || true
-count "find . -type f -name '*.sqlite*' -o -type f -name '*.db'" "db/sqlite" || true
+count "find . -type f -name '*.db'" "db files" || true
 
 # 目录类
 find . -type d -name node_modules -prune -exec rm -rf {} +
@@ -35,8 +35,7 @@ find . -type f -name '*.py[co]' -delete || true
 # TS/ESLint 缓存
 find . -type f -name '*.tsbuildinfo*' -delete || true
 find . -type f -name '.eslintcache' -delete || true
-# 数据库
-find . -type f -name '*.sqlite*' -delete || true
+# 数据库快照/本地数据库文件（通用 *.db）
 find . -type f -name '*.db' -delete || true
 # PowerShell 脚本（若被错误提交到根目录）
 find . -maxdepth 3 -type f -name '*.ps1' -not -path './.git/*' -delete || true
@@ -56,6 +55,6 @@ count "find . -type d -name __pycache__"   "__pycache__ dirs" || true
 count "find . -type f -name '*.py[co]'"    "py[co] files" || true
 count "find . -type f -name '*.tsbuildinfo*'" "tsbuildinfo" || true
 count "find . -type f -name '.eslintcache'"  ".eslintcache" || true
-count "find . -type f -name '*.sqlite*' -o -type f -name '*.db'" "db/sqlite" || true
+count "find . -type f -name '*.db'" "db files" || true
 
 echo '完成。'

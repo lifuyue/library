@@ -60,11 +60,11 @@ docker compose -f docker-compose.prod.yml down -v
 docker compose -f docker-compose.prod.yml restart backend
 ```
 
-## 7. Switching DB (SQLite -> PostgreSQL)
+## 7. Database
 1. Set `DATABASE_URL` in `.env.postgres`.
-2. Run: `docker compose -f docker-compose.prod.yml up -d db`.
-3. Apply migrations automatically on backend startup (already in Dockerfile CMD).
-4. Import old data if needed.
+2. Run: `docker compose -f docker-compose.prod.yml up -d postgresql`.
+3. Migrations are applied automatically on backend startup.
+4. Use standard `pg_dump`/`psql` for backups and restore.
 
 ## 8. Security
 - Use strong `SECRET_KEY`.

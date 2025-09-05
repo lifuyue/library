@@ -13,9 +13,9 @@ else
     exit 1
 fi
 
-CONTAINER_NAME="cs-library-postgres"
-DB_USER="cs_user"
-DB_NAME="cs_library"
+CONTAINER_NAME="postgresql"
+DB_USER="csuser"
+DB_NAME="cslibrary"
 
 # 检查容器是否运行
 check_container() {
@@ -146,14 +146,14 @@ reset_db() {
 # 执行迁移
 migrate_db() {
     echo "🔧 执行数据库迁移..."
-    $COMPOSE_CMD exec backend alembic upgrade head
+    $COMPOSE_CMD exec cslibrary-backend alembic upgrade head
     echo "✅ 迁移完成"
 }
 
 # 查看日志
 show_logs() {
     echo "📋 数据库日志:"
-    $COMPOSE_CMD logs db --tail=50 -f
+    $COMPOSE_CMD logs postgresql --tail=50 -f
 }
 
 # 主程序

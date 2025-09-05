@@ -30,8 +30,8 @@ RUN groupadd -r app && useradd -r -g app app && \
 USER app
 
 EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -fsS http://localhost:8000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD sh -c "wget -qO- http://localhost:8000/api/health || curl -fsS http://localhost:8000/api/health"
 
 # 生产启动：迁移 + gunicorn(uvicorn worker)
 ENV APP_WORKERS=2

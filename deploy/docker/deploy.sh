@@ -74,13 +74,13 @@ $COMPOSE_CMD ps
 echo ""
 echo "🔍 等待数据库就绪..."
 for i in {1..30}; do
-    if $COMPOSE_CMD exec -T db pg_isready -U cs_user >/dev/null 2>&1; then
+    if $COMPOSE_CMD exec -T postgresql pg_isready -U ${POSTGRES_USER:-csuser} >/dev/null 2>&1; then
         echo "✅ 数据库就绪"
         break
     fi
     if [ $i -eq 30 ]; then
         echo "❌ 数据库启动超时"
-        $COMPOSE_CMD logs db
+        $COMPOSE_CMD logs postgresql
         exit 1
     fi
     sleep 2
@@ -96,7 +96,7 @@ for i in {1..60}; do
     fi
     if [ $i -eq 60 ]; then
         echo "❌ 后端服务启动超时"
-        $COMPOSE_CMD logs backend
+        $COMPOSE_CMD logs cslibrary-backend
         exit 1
     fi
     sleep 2
@@ -121,5 +121,5 @@ echo "   停止服务: $COMPOSE_CMD down"
 echo "   重启服务: $COMPOSE_CMD restart"
 echo ""
 echo "💾 数据备份："
-echo "   备份数据库: $COMPOSE_CMD exec db pg_dump -U cs_user cs_library > backup_\$(date +%Y%m%d_%H%M%S).sql"
+echo "   备份数据库: $COMPOSE_CMD exec postgresql pg_dump -U ${POSTGRES_USER:-csuser} ${POSTGRES_DB:-cslibrary} > backup_\$(date +%Y%m%d_%H%M%S).sql"
 echo ""

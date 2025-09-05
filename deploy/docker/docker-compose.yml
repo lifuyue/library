@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   # PostgreSQL 数据库服务
-  db:
-    image: postgres:16-alpine
-    container_name: cs-library-postgres
+  postgresql:
+    image: postgres:17.6-alpine
+    container_name: postgresql
     env_file:
       - .env.deploy
     environment:
@@ -13,19 +11,23 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     restart: unless-stopped
+    networks:
+      - cslibrary-net
 
   # 后端服务
-  backend:
+  cslibrary-backend:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.backend
-    container_name: cs-library-backend
+    container_name: cslibrary-backend
     ports:
       - "8000:8000"
     env_file:
@@ -33,33 +35,40 @@ services:
     environment:
       - APP_WORKERS=${APP_WORKERS:-2}
     depends_on:
-      db:
+      postgresql:
         condition: service_healthy
     volumes:
       - backend_uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/health || curl -fsS http://localhost:8000/api/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 3s
       retries: 3
+      start_period: 10s
+    networks:
+      - cslibrary-net
 
   # 前端服务
-  frontend:
+  cslibrary-frontend:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.frontend
-    container_name: cs-library-frontend
+      args:
+        VITE_API_BASE_URL: http://cslibrary-backend:8000
+    container_name: cslibrary-frontend
     ports:
       - "80:80"
     depends_on:
-      - backend
+      - cslibrary-backend
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1/ > /dev/null"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks:
+      - cslibrary-net
 
 volumes:
   backend_uploads:
@@ -68,5 +77,5 @@ volumes:
     driver: local
 
 networks:
-  default:
-    name: cs-library-network
+  cslibrary-net:
+    driver: bridge

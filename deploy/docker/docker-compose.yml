@@ -28,8 +28,7 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.backend
     container_name: cslibrary-backend
-    ports:
-      - "8000:8000"
+    # 内部网络暴露，生产由 nginx 统一对外
     env_file:
       - .env.deploy
     environment:
@@ -49,7 +48,7 @@ services:
     networks:
       - cslibrary-net
 
-  # 前端服务
+  # 前端服务（内部 Nginx 提供静态文件，端口 80）
   cslibrary-frontend:
     build:
       context: ../..
@@ -57,13 +56,31 @@ services:
       args:
         VITE_API_BASE_URL: http://cslibrary-backend:8000
     container_name: cslibrary-frontend
-    ports:
-      - "80:80"
+    # 内部网络暴露，生产由 nginx 统一对外
     depends_on:
       - cslibrary-backend
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://127.0.0.1/ > /dev/null"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks:
+      - cslibrary-net
+
+  # 入口 Nginx 反向代理（单一外部入口）
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: cslibrary-nginx
+    depends_on:
+      - cslibrary-backend
+      - cslibrary-frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 5

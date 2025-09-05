@@ -2,10 +2,8 @@ import axios from 'axios'
 import type { Material, MaterialResponse, Category } from '@/types'
 import type { LoginForm, RegisterForm, AuthResponse, User } from '@/types/auth'
 import type { AdminStats, AdminUser } from '@/types/admin'
-import config from '@/config/environment'
-
 const api = axios.create({
-  baseURL: `${config.API_BASE_URL}/api`,
+  baseURL: '/api',
   timeout: 10000,
 })
 

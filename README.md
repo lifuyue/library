@@ -190,6 +190,22 @@ npm run dev
 - 后端：`GET /api/health` 返回 200
 - Docker Compose 内置 `healthcheck`，容器会等待依赖就绪
 
+### 生产部署（Route B：Nginx 反向代理，单一入口）
+
+- 统一对外公开 `nginx:80`，Nginx 将：
+  - `/api/*` 代理到后端 `cslibrary-backend:8000`
+  - `/uploads/*` 代理到后端 `cslibrary-backend:8000`
+  - 其余路径代理到前端 `cslibrary-frontend:80`
+- 前端使用相对路径请求 API（`/api/...`），避免出现 `/api/api`。
+
+验证命令：
+```bash
+docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env.deploy up -d --build
+docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+curl -i http://127.0.0.1/
+curl -i http://127.0.0.1/api/health
+```
+
 ## 数据库迁移
 
 项目使用 **Alembic** 管理数据库 schema 变更，确保多环境一致性和可回滚性。

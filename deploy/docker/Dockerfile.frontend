@@ -1,29 +1,9 @@
-# 前端 Dockerfile
-FROM node:lts-slim AS builder
-
-WORKDIR /app
-
-ENV NODE_ENV=production
-# 允许注入 Vite 构建时 API 基础地址
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
-# 仅复制依赖声明文件以提升缓存命中
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --prefer-offline --no-audit --loglevel=error
-# 复制源代码并构建
-COPY frontend/ ./
-RUN npm run build
-
-# 生产阶段
 FROM nginx:stable-alpine
 # 工具：为健康检查提供 curl
 RUN apk add --no-cache curl
 
-# 复制构建结果
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# 复制 nginx 配置
-COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
+# 复制本机已构建的前端产物（frontend/dist）
+COPY frontend/dist /usr/share/nginx/html
 
 # 暴露端口
 EXPOSE 80

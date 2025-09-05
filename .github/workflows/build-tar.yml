@@ -51,7 +51,6 @@ jobs:
 
       - name: Set variables
         run: |
-          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ inputs.image_tag }}" >> $GITHUB_ENV
           if [ "${{ inputs.prod_build }}" = "true" ]; then
             if [ "${{ matrix.service }}" = "frontend" ]; then
@@ -74,7 +73,7 @@ jobs:
 
       - name: Build ${{ matrix.service }} and export docker-tar
         run: |
-          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_${SHORT_SHA}_amd64"
+          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
           docker buildx build "${{ matrix.context }}" \
             -f "$DOCKERFILE" \
             --platform "$PLATFORM" \
@@ -85,7 +84,7 @@ jobs:
 
       - name: Compress & checksum
         run: |
-          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_${SHORT_SHA}_amd64"
+          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
           echo "$IMAGE_NAME:$IMAGE_TAG" > "${OUT_BASENAME}.images.txt"
           gzip -9 "${OUT_BASENAME}.tar"
           sha256sum "${OUT_BASENAME}.tar.gz" > "${OUT_BASENAME}.tar.gz.sha256"
@@ -95,11 +94,11 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.SERVICE }}-${{ env.SAFE_IMAGE_TAG }}-${{ env.SHORT_SHA }}-amd64
+          name: ${{ env.SERVICE }}-${{ env.SAFE_IMAGE_TAG }}-amd64
           path: |
-            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_${{ env.SHORT_SHA }}_amd64.tar.gz
-            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_${{ env.SHORT_SHA }}_amd64.tar.gz.sha256
-            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_${{ env.SHORT_SHA }}_amd64.images.txt
+            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_amd64.tar.gz
+            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_amd64.tar.gz.sha256
+            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_amd64.images.txt
           if-no-files-found: error
           retention-days: 7
 

@@ -1,0 +1,128 @@
+name: Build frontend & backend Docker images (amd64) and export docker-tars
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image version tag, e.g. v1.2.3"
+        type: string
+        required: true
+        default: "v1.0.0"
+      prod_build:
+        description: "Use production Dockerfiles (true) or dev (false)"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Include image_tag to avoid cancelling different version builds on same ref
+  group: build-tar-${{ github.ref }}-${{ inputs.image_tag }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: backend
+            dockerfile_prod: backend/Dockerfile.prod
+            dockerfile_dev: backend/Dockerfile
+            image_name: myapp-backend
+          - service: frontend
+            context: frontend
+            dockerfile_prod: frontend/Dockerfile.prod
+            dockerfile_dev: frontend/Dockerfile
+            image_name: myapp-frontend
+    env:
+      PLATFORM: linux/amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set variables (SHORT_SHA, IMAGE_TAG, DOCKERFILE, IMAGE_NAME)
+        run: |
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${{ inputs.image_tag }}" >> $GITHUB_ENV
+
+          # Frontend Dockerfile.prod currently uses 'npm ci --only=production' which excludes vite/typescript/vue-tsc.
+          # 为保证构建成功，暂时对 frontend prod 构建回退到 dev Dockerfile（直到修复 Dockerfile.prod）。
+          if [ "${{ inputs.prod_build }}" = "true" ]; then
+            if [ "${{ matrix.service }}" = "frontend" ]; then
+              echo "[warn] frontend prod build requested but production Dockerfile lacks devDependencies -> falling back to dev Dockerfile" >&2
+              DF="${{ matrix.dockerfile_dev }}"
+            else
+              DF="${{ matrix.dockerfile_prod }}"
+            fi
+          else
+            DF="${{ matrix.dockerfile_dev }}"
+          fi
+
+          echo "DOCKERFILE=$DF" >> $GITHUB_ENV
+          echo "IMAGE_NAME=${{ matrix.image_name }}" >> $GITHUB_ENV
+          echo "SERVICE=${{ matrix.service }}" >> $GITHUB_ENV
+
+          # Sanitize IMAGE_TAG for artifact naming (replace / with -)
+          SAFE_IMAGE_TAG=$(echo "${{ inputs.image_tag }}" | tr '/' '-')
+          echo "SAFE_IMAGE_TAG=$SAFE_IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+    - name: Build ${{ matrix.service }} (amd64) and export docker-tar
+        run: |
+          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_${SHORT_SHA}_amd64"
+          docker buildx build "${{ matrix.context }}" \
+            -f "$DOCKERFILE" \
+            --platform "$PLATFORM" \
+            --tag "$IMAGE_NAME:$IMAGE_TAG" \
+            --output "type=docker,dest=${OUT_BASENAME}.tar"
+          ls -lh "${OUT_BASENAME}.tar"
+      echo "Built image: $IMAGE_NAME:$IMAGE_TAG (service=$SERVICE)"
+
+  - name: Compress & checksum ${{ matrix.service }}
+        run: |
+          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_${SHORT_SHA}_amd64"
+            
+          # Extra: also produce an 'images.txt' manifest listing the tag
+          echo "$IMAGE_NAME:$IMAGE_TAG" > ${OUT_BASENAME}.images.txt
+
+          gzip -9 "${OUT_BASENAME}.tar"
+          sha256sum "${OUT_BASENAME}.tar.gz" > "${OUT_BASENAME}.tar.gz.sha256"
+          ls -lh "${OUT_BASENAME}.tar.gz"
+          cat "${OUT_BASENAME}.tar.gz.sha256"
+        shell: bash
+
+    - name: Upload artifacts (${{ matrix.service }})
+        uses: actions/upload-artifact@v4
+        with:
+      name: ${{ env.SERVICE }}-${{ env.SAFE_IMAGE_TAG }}-${{ env.SHORT_SHA }}-amd64
+          path: |
+            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_${{ env.SHORT_SHA }}_amd64.tar.gz
+            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_${{ env.SHORT_SHA }}_amd64.tar.gz.sha256
+            ${{ env.SERVICE }}_${{ env.IMAGE_TAG }}_${{ env.SHORT_SHA }}_amd64.images.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  summary:
+    needs: build-export
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          echo "Generated artifacts for services: backend, frontend" >> $GITHUB_STEP_SUMMARY
+          echo "Tag input: ${{ inputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "Short SHA (this job): ${SHORT_SHA}" >> $GITHUB_STEP_SUMMARY
+          echo "Note: frontend prod Dockerfile currently missing dev deps; workflow falls back to dev Dockerfile when prod_build=true." >> $GITHUB_STEP_SUMMARY

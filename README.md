@@ -65,6 +65,37 @@ library/
 - Node.js 16+
 - npm 或 yarn
 
+### 使用 Makefile（推荐）
+
+如果已安装 Docker 与 Docker Compose（v2），可以使用根目录下的 `Makefile` 快速启动：
+
+```bash
+# 开发环境（前台运行，显示日志）
+make dev
+
+# 开发环境（后台运行）
+make dev-up-d
+
+# 重新构建并启动开发环境
+make dev-build
+
+# 查看开发环境日志
+make dev-logs
+
+# 进入容器
+make sh-backend
+make sh-frontend
+
+# 生产环境（后台运行）
+make prod-up
+
+# 停止
+make dev-down
+make prod-down
+```
+
+更多命令请运行 `make help` 查看。
+
 ### 开发环境启动
 
 #### 启动后端（方式一：run_server 脚本）

@@ -1,0 +1,68 @@
+# Backend Docker build context exclusions
+# Exclude files that shouldn't be copied into the Docker image
+
+# Version control
+.git
+.gitignore
+
+# Python cache and compiled files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.so
+.Python
+*.egg-info
+.eggs
+dist
+build
+
+# Virtual environments
+.env
+.env.*
+.venv
+venv
+env
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Testing and coverage
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.cache
+
+# Documentation
+*.md
+docs
+
+# Development files
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Application specific
+uploads
+data
+tmp

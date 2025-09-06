@@ -72,6 +72,7 @@ cp backend/.env.example backend/.env
 ```
 
 后端启动时会使用 `python-dotenv` 自动加载 `.env` 文件中的变量，无需手动 `export`。
+启动脚本会在连接数据库前等待数据库服务就绪，若 `DATABASE_URL` 未配置将会提示错误并停止启动。
 
 ### Docker Compose 启动（PostgreSQL）
 

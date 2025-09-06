@@ -1,0 +1,3 @@
+CREATE USER csuser WITH ENCRYPTED PASSWORD 'change_me';
+CREATE DATABASE cslibrary OWNER csuser;
+GRANT ALL PRIVILEGES ON DATABASE cslibrary TO csuser;

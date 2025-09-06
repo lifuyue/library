@@ -13,14 +13,14 @@ services:
     environment:
       - ENVIRONMENT=production
       - PYTHONPATH=/app
-      - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/library_db
+      - DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary
     env_file:
       - ./backend/.env.prod
     volumes:
       # Only persist uploads, no source code mounts
       - backend_uploads:/app/uploads
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -38,6 +38,7 @@ services:
       - "3000:80"
     environment:
       - NODE_ENV=production
+      - DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary
     depends_on:
       - backend
     restart: unless-stopped
@@ -47,14 +48,17 @@ services:
       timeout: 10s
       retries: 3
 
-  db:
-    image: postgres:16-alpine
+  postgres:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    container_name: postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: library_db
+      POSTGRES_USER: csuser
+      POSTGRES_PASSWORD: change_me
+      POSTGRES_DB: cslibrary
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U csuser -d cslibrary"]
       interval: 5s
       timeout: 5s
       retries: 5

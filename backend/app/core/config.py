@@ -1,10 +1,15 @@
 import os
 import sys
+from pathlib import Path
 from typing import List
 
 from dotenv import load_dotenv
 
+# Load .env from default location and explicitly from /app/.env when running in container
 load_dotenv()
+app_env = Path('/app/.env')
+if app_env.exists():
+    load_dotenv(dotenv_path=app_env)
 
 class Settings:
     # JWT 配置
@@ -44,8 +49,10 @@ class Settings:
 settings = Settings()
 
 if not settings.DATABASE_URL:
-    print("DATABASE_URL is not set; please define it in the environment or .env file")
+    print("[config] DATABASE_URL is not set; please define it in the environment or .env file")
     sys.exit(1)
+else:
+    print("[config] DATABASE_URL loaded from environment")
 
 # 向后兼容的常量
 SECRET_KEY = settings.SECRET_KEY

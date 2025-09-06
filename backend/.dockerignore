@@ -18,8 +18,8 @@ dist
 build
 
 # Virtual environments
-.env
-.env.*
+.env*
+!.env
 .venv
 venv
 env

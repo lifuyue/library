@@ -15,13 +15,13 @@ services:
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
-      - DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary
+      - DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary
     volumes:
       - ./backend:/app
       - backend_uploads:/app/uploads
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
@@ -35,6 +35,7 @@ services:
     environment:
       - VITE_API_BASE_URL=http://localhost:8000
       - NODE_ENV=development
+      - DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -43,8 +44,11 @@ services:
       - backend
     restart: unless-stopped
 
-  db:
-    image: postgres:16-alpine
+  postgres:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    container_name: postgres
     environment:
       POSTGRES_USER: csuser
       POSTGRES_PASSWORD: change_me
@@ -59,7 +63,7 @@ services:
     networks:
       default:
         aliases:
-          - postgresql
+          - postgres
 
 volumes:
   backend_uploads:

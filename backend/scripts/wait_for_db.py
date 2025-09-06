@@ -3,9 +3,6 @@ import re
 import time
 import psycopg
 
-DATABASE_URL_RAW = os.getenv("DATABASE_URL")
-TIMEOUT = int(os.getenv("DB_WAIT_TIMEOUT", "30"))  # seconds
-
 
 def normalize_db_url(url: str) -> str:
     """Normalize SQLAlchemy-style 'postgresql+driver://' URLs to plain 'postgresql://' for psycopg.
@@ -22,10 +19,12 @@ def normalize_db_url(url: str) -> str:
 
 
 def main():
-    if not DATABASE_URL_RAW:
+    database_url_raw = os.getenv("DATABASE_URL")
+    if not database_url_raw:
         raise RuntimeError("DATABASE_URL is not set")
 
-    db_url = normalize_db_url(DATABASE_URL_RAW)
+    db_url = normalize_db_url(database_url_raw)
+    timeout = int(os.getenv("DB_WAIT_TIMEOUT", "30"))
 
     start = time.time()
     while True:
@@ -36,7 +35,7 @@ def main():
             break
         except Exception as e:
             elapsed = time.time() - start
-            if elapsed > TIMEOUT:
+            if elapsed > timeout:
                 raise RuntimeError(f"Database not ready: {e}")
             print(f"[wait_for_db] waiting for database... {e}")
             time.sleep(1)

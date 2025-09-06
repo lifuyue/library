@@ -13,6 +13,7 @@ services:
     environment:
       - ENVIRONMENT=production
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/library_db
     env_file:
       - ./backend/.env.prod
     volumes:

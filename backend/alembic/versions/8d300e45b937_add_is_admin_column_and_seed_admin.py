@@ -83,9 +83,17 @@ def upgrade() -> None:
         sa.text(
             """
             INSERT INTO users (username, email, hashed_password, is_active, is_admin, created_at)
-            SELECT :username, :email, :password, TRUE, TRUE, :created_at
+            SELECT
+                CAST(:username AS VARCHAR(50)),
+                CAST(:email AS VARCHAR(100)),
+                :password,
+                TRUE,
+                TRUE,
+                :created_at
             WHERE NOT EXISTS (
-                SELECT 1 FROM users WHERE username = :username OR email = :email
+                SELECT 1 FROM users
+                WHERE username = CAST(:username AS VARCHAR(50))
+                   OR email = CAST(:email AS VARCHAR(100))
             )
             """
         ),

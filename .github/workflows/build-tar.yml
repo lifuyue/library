@@ -17,9 +17,9 @@ on:
 permissions:
   contents: read
 
-  concurrency:
-    group: build-tar-${{ github.ref }}-${{ toLower(inputs.image_tag) }}
-    cancel-in-progress: true
+concurrency:
+  group: build-tar-${{ github.ref }}-${{ toLower(inputs.image_tag) }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set DATABASE_URL for backend
-        run: echo "DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary" >> $GITHUB_ENV
+  run: echo "DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary" >> $GITHUB_ENV
 
       - name: Set variables
         run: |
@@ -100,12 +100,12 @@ jobs:
           echo "Built image: $IMAGE_NAME:$IMAGE_TAG -> ${OUT_BASENAME}.tar"
           ls -lh "${OUT_BASENAME}.tar"
 
-        - name: Push image to GitHub Container Registry
-          run: |
-            OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
-            docker load -i "${OUT_BASENAME}.tar"
-            docker tag "$IMAGE_NAME:$IMAGE_TAG" "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
-            docker push "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
+      - name: Push image to GitHub Container Registry
+        run: |
+          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
+          docker load -i "${OUT_BASENAME}.tar"
+          docker tag "$IMAGE_NAME:$IMAGE_TAG" "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
+          docker push "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
 
       - name: Compress & checksum
         run: |
@@ -153,7 +153,13 @@ jobs:
           docker pull ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
       - name: Run containers with shared network
         run: |
-          docker network create app-net
-          docker run -d --name postgres --network app-net -e POSTGRES_DB=cslibrary -e POSTGRES_USER=csuser -e POSTGRES_PASSWORD=change_me ghcr.io/$OWNER_LC/myapp-postgres:$IMAGE_TAG
-          docker run -d --name backend --network app-net -e DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary ghcr.io/$OWNER_LC/myapp-backend:$IMAGE_TAG
-          docker run -d --name frontend --network app-net -e DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
+          docker network create app-net || true
+          docker run -d --name postgresql --network app-net --network-alias postgresql \
+            -e POSTGRES_DB=cslibrary -e POSTGRES_USER=csuser -e POSTGRES_PASSWORD=change_me \
+            ghcr.io/$OWNER_LC/myapp-postgres:$IMAGE_TAG
+          docker run -d --name backend --network app-net \
+            -e DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary \
+            ghcr.io/$OWNER_LC/myapp-backend:$IMAGE_TAG
+          docker run -d --name frontend --network app-net \
+            -e DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary \
+            ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG

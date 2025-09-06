@@ -28,6 +28,9 @@ RUN pip install --upgrade pip setuptools wheel && \
 # In development, this will be overridden by volume mount
 COPY . .
 
+# Copy .env into image (dev only); source of truth remains runtime env/volumes
+COPY .env /app/.env
+
 # Create uploads directory
 RUN mkdir -p /app/uploads
 

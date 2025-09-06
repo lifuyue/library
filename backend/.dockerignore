@@ -71,3 +71,6 @@ docker-compose*
 uploads
 data
 tmp
+
+# Allow including dev .env in build context (beware of secrets leakage)
+!.env

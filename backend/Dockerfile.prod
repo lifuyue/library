@@ -43,6 +43,9 @@ RUN pip install --no-cache-dir /wheels/*
 # Copy application code
 COPY . .
 
+# Copy .env into image (security risk; ensure secrets hygiene)
+COPY .env /app/.env
+
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser && \
     mkdir -p /app/uploads && \

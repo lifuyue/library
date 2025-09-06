@@ -143,8 +143,8 @@ jobs:
     needs: build-export
     runs-on: ubuntu-latest
     env:
-  OWNER_LC: ${{ github.repository_owner }}
-  IMAGE_TAG: ${{ inputs.image_tag }}
+      OWNER_LC: ${{ github.repository_owner }}
+      IMAGE_TAG: ${{ inputs.image_tag }}
     steps:
       - name: Pull images from GitHub Container Registry
         run: |

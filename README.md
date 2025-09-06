@@ -71,6 +71,8 @@ library/
 cp backend/.env.example backend/.env
 ```
 
+后端启动时会使用 `python-dotenv` 自动加载 `.env` 文件中的变量，无需手动 `export`。
+
 ### Docker Compose 启动（PostgreSQL）
 
 ```bash

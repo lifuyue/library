@@ -1,5 +1,10 @@
 import os
+import sys
 from typing import List
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Settings:
     # JWT 配置
@@ -39,7 +44,8 @@ class Settings:
 settings = Settings()
 
 if not settings.DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable is required")
+    print("DATABASE_URL is not set; please define it in the environment or .env file")
+    sys.exit(1)
 
 # 向后兼容的常量
 SECRET_KEY = settings.SECRET_KEY

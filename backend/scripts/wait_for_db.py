@@ -1,6 +1,9 @@
 import os
 import re
+import sys
 import time
+
+from dotenv import load_dotenv
 import psycopg
 
 
@@ -19,9 +22,11 @@ def normalize_db_url(url: str) -> str:
 
 
 def main():
+    load_dotenv()
     database_url_raw = os.getenv("DATABASE_URL")
     if not database_url_raw:
-        raise RuntimeError("DATABASE_URL is not set")
+        print("[wait_for_db] DATABASE_URL is not set; please define it in the environment or .env file")
+        sys.exit(1)
 
     db_url = normalize_db_url(database_url_raw)
     timeout = int(os.getenv("DB_WAIT_TIMEOUT", "30"))

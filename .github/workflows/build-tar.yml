@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set DATABASE_URL for backend
-  run: echo "DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary" >> $GITHUB_ENV
+        run: echo "DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary" >> $GITHUB_ENV
 
       - name: Set variables
         run: |

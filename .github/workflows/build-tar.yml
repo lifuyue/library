@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-tar-${{ github.ref }}-${{ toLower(inputs.image_tag) }}
+  group: build-tar-${{ github.ref }}-${{ inputs.image_tag }}
   cancel-in-progress: true
 
 defaults:
@@ -135,7 +135,7 @@ jobs:
       - name: Summary
         run: |
           echo "Services: backend, frontend, postgres" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: ${{ toLower(inputs.image_tag) }}" >> $GITHUB_STEP_SUMMARY
+          echo "Tag: ${{ inputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "prod_build: ${{ inputs.prod_build }}" >> $GITHUB_STEP_SUMMARY
           echo "Note: frontend may fallback to dev Dockerfile if prod lacks dev deps." >> $GITHUB_STEP_SUMMARY
 
@@ -143,8 +143,8 @@ jobs:
     needs: build-export
     runs-on: ubuntu-latest
     env:
-      OWNER_LC: ${{ toLower(github.repository_owner) }}
-      IMAGE_TAG: ${{ toLower(inputs.image_tag) }}
+  OWNER_LC: ${{ github.repository_owner }}
+  IMAGE_TAG: ${{ inputs.image_tag }}
     steps:
       - name: Pull images from GitHub Container Registry
         run: |

@@ -163,3 +163,4 @@ jobs:
           docker run -d --name frontend --network app-net \
             -e DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary \
             ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
+ 

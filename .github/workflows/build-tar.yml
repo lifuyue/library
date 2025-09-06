@@ -17,9 +17,9 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: build-tar-${{ github.ref }}-${{ inputs.image_tag }}
-  cancel-in-progress: true
+  concurrency:
+    group: build-tar-${{ github.ref }}-${{ toLower(inputs.image_tag) }}
+    cancel-in-progress: true
 
 defaults:
   run:
@@ -59,7 +59,10 @@ jobs:
 
       - name: Set variables
         run: |
-          echo "IMAGE_TAG=${{ inputs.image_tag }}" >> $GITHUB_ENV
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_TAG="$(echo "${{ inputs.image_tag }}" | tr '[:upper:]' '[:lower:]')"
+          echo "OWNER_LC=$OWNER_LC" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
           if [ "${{ inputs.prod_build }}" = "true" ]; then
             if [ "${{ matrix.service }}" = "frontend" ]; then
               echo "[warn] frontend prod build requested but production Dockerfile lacks devDependencies -> fallback to dev" >&2
@@ -73,8 +76,8 @@ jobs:
           echo "DOCKERFILE=$DF" >> $GITHUB_ENV
           echo "IMAGE_NAME=${{ matrix.image_name }}" >> $GITHUB_ENV
           echo "SERVICE=${{ matrix.service }}" >> $GITHUB_ENV
-          SAFE_IMAGE_TAG=$(echo "${{ inputs.image_tag }}" | tr '/' '-')
-            echo "SAFE_IMAGE_TAG=$SAFE_IMAGE_TAG" >> $GITHUB_ENV
+          SAFE_IMAGE_TAG=$(echo "$IMAGE_TAG" | tr '/' '-')
+          echo "SAFE_IMAGE_TAG=$SAFE_IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -97,12 +100,12 @@ jobs:
           echo "Built image: $IMAGE_NAME:$IMAGE_TAG -> ${OUT_BASENAME}.tar"
           ls -lh "${OUT_BASENAME}.tar"
 
-      - name: Push image to GitHub Container Registry
-        run: |
-          OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
-          docker load -i "${OUT_BASENAME}.tar"
-          docker tag "$IMAGE_NAME:$IMAGE_TAG" "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$IMAGE_TAG"
-          docker push "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$IMAGE_TAG"
+        - name: Push image to GitHub Container Registry
+          run: |
+            OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
+            docker load -i "${OUT_BASENAME}.tar"
+            docker tag "$IMAGE_NAME:$IMAGE_TAG" "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
+            docker push "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
 
       - name: Compress & checksum
         run: |
@@ -132,22 +135,25 @@ jobs:
       - name: Summary
         run: |
           echo "Services: backend, frontend, postgres" >> $GITHUB_STEP_SUMMARY
-          echo "Tag: ${{ inputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "Tag: ${{ toLower(inputs.image_tag) }}" >> $GITHUB_STEP_SUMMARY
           echo "prod_build: ${{ inputs.prod_build }}" >> $GITHUB_STEP_SUMMARY
           echo "Note: frontend may fallback to dev Dockerfile if prod lacks dev deps." >> $GITHUB_STEP_SUMMARY
 
   deploy:
     needs: build-export
     runs-on: ubuntu-latest
+    env:
+      OWNER_LC: ${{ toLower(github.repository_owner) }}
+      IMAGE_TAG: ${{ toLower(inputs.image_tag) }}
     steps:
       - name: Pull images from GitHub Container Registry
         run: |
-          docker pull ghcr.io/${{ github.repository_owner }}/myapp-postgres:${{ inputs.image_tag }}
-          docker pull ghcr.io/${{ github.repository_owner }}/myapp-backend:${{ inputs.image_tag }}
-          docker pull ghcr.io/${{ github.repository_owner }}/myapp-frontend:${{ inputs.image_tag }}
+          docker pull ghcr.io/$OWNER_LC/myapp-postgres:$IMAGE_TAG
+          docker pull ghcr.io/$OWNER_LC/myapp-backend:$IMAGE_TAG
+          docker pull ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
       - name: Run containers with shared network
         run: |
           docker network create app-net
-          docker run -d --name postgres --network app-net -e POSTGRES_DB=cslibrary -e POSTGRES_USER=csuser -e POSTGRES_PASSWORD=change_me ghcr.io/${{ github.repository_owner }}/myapp-postgres:${{ inputs.image_tag }}
-          docker run -d --name backend --network app-net -e DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary ghcr.io/${{ github.repository_owner }}/myapp-backend:${{ inputs.image_tag }}
-          docker run -d --name frontend --network app-net -e DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary ghcr.io/${{ github.repository_owner }}/myapp-frontend:${{ inputs.image_tag }}
+          docker run -d --name postgres --network app-net -e POSTGRES_DB=cslibrary -e POSTGRES_USER=csuser -e POSTGRES_PASSWORD=change_me ghcr.io/$OWNER_LC/myapp-postgres:$IMAGE_TAG
+          docker run -d --name backend --network app-net -e DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary ghcr.io/$OWNER_LC/myapp-backend:$IMAGE_TAG
+          docker run -d --name frontend --network app-net -e DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG

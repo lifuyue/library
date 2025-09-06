@@ -4,6 +4,7 @@ import sys
 import time
 
 from dotenv import load_dotenv
+from pathlib import Path
 import psycopg
 
 
@@ -22,7 +23,11 @@ def normalize_db_url(url: str) -> str:
 
 
 def main():
+    # Load .env from default location and explicitly from /app/.env when running in container
     load_dotenv()
+    app_env = Path('/app/.env')
+    if app_env.exists():
+        load_dotenv(dotenv_path=app_env)
     database_url_raw = os.getenv("DATABASE_URL")
     if not database_url_raw:
         print("[wait_for_db] DATABASE_URL is not set; please define it in the environment or .env file")

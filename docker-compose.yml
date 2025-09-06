@@ -15,7 +15,7 @@ services:
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
-  - DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary
+      - DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary
     volumes:
       - ./backend:/app
       - backend_uploads:/app/uploads

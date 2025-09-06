@@ -45,6 +45,7 @@ jobs:
             image_name: myapp-frontend
     env:
       PLATFORM: linux/amd64
+      DATABASE_URL: postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary
     steps:
       - name: Checkout
         uses: actions/checkout@v4

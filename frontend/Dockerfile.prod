@@ -6,9 +6,13 @@ FROM node:20-alpine as builder
 
 WORKDIR /app
 
+# Build-time API base
+ARG VITE_API_BASE=""
+ENV VITE_API_BASE=$VITE_API_BASE
+
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source code and build the application
 COPY . .

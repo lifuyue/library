@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip wheel setuptools && \
     pip wheel --wheel-dir /wheels -r requirements.txt
 
-# 2) Runtime：仅包含运行所需（使用 psycopg[binary] 无需 libpq-dev/gcc）
+# 2) Runtime：仅包含运行所需（使用 psycopg2-binary 无需 libpq-dev/gcc）
 FROM python:3.11-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app

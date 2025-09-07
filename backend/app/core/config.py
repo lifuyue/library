@@ -21,7 +21,7 @@ class Settings:
 
     # 数据库配置（仅支持 PostgreSQL）
     # 必须通过环境变量 DATABASE_URL 提供，格式：
-    # 同步: postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
+    # 同步: postgresql+psycopg2://USER:PASSWORD@HOST:5432/DBNAME
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
 
     # CORS配置

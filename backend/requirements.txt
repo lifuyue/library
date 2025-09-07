@@ -32,7 +32,7 @@ Pillow>=10.4.0,<10.5
 python-dotenv>=1.1.0,<1.2
 
 # 数据库驱动
-psycopg[binary]>=3.2.2,<3.3    # 升级到 3.2.x; 3.1.x 对 Python 3.13 缺少 psycopg-binary wheels
+psycopg2-binary>=2.9.7
 # mysqlclient>=2.2.4,<2.3       # MySQL/MariaDB (需要系统库)
 
 #############################################

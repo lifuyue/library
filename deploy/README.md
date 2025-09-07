@@ -75,8 +75,8 @@ docker-compose up --build
 
 ### 后端环境变量（PostgreSQL only）
 ```env
-# 数据库（同步栈; psycopg 驱动）
-DATABASE_URL=postgresql+psycopg://app:app@postgresql:5432/cslibrary
+# 数据库（同步栈; psycopg2 驱动）
+DATABASE_URL=postgresql+psycopg2://app:app@postgresql:5432/cslibrary
 
 # JWT 安全
 SECRET_KEY=your-very-secure-secret-key

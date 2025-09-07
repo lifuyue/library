@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import time
+import socket
 
 from dotenv import load_dotenv
 from pathlib import Path
@@ -31,15 +32,32 @@ def main():
     load_dotenv()
     app_env = Path('/app/.env')
     if app_env.exists():
+        logger.info(f"loading env from {app_env}")
         load_dotenv(dotenv_path=app_env)
 
     database_url_raw = os.getenv("DATABASE_URL")
+    logger.info(f"raw DATABASE_URL: {database_url_raw}")
     if not database_url_raw:
         logger.error("DATABASE_URL is not set; please define it in the environment or .env file")
         sys.exit(1)
-    logger.info("DATABASE_URL loaded")
 
     db_url = normalize_db_url(database_url_raw)
+    logger.info(f"normalized DB URL: {db_url}")
+    # Parse host for DNS diagnostics
+    host = None
+    try:
+        m = re.match(r"^postgresql://[^@]+@([^/:]+)", db_url)
+        host = m.group(1) if m else None
+    except Exception:
+        host = None
+    if host:
+        logger.info(f"parsed host: {host}")
+        try:
+            addrs = socket.getaddrinfo(host, 5432, proto=socket.IPPROTO_TCP)
+            ips = sorted({a[4][0] for a in addrs})
+            logger.info(f"DNS {host} -> {ips}")
+        except Exception as e:
+            logger.info(f"DNS resolve failed for {host}: {e}")
     timeout = int(os.getenv("DB_WAIT_TIMEOUT", "30"))
 
     start = time.time()
@@ -53,7 +71,7 @@ def main():
             elapsed = time.time() - start
             if elapsed > timeout:
                 raise RuntimeError(f"Database not ready: {e}")
-            logger.info(f"waiting for database... {e} (elapsed {int(elapsed)}s)")
+            logger.info(f"waiting for database... {type(e).__name__}: {e} (elapsed {int(elapsed)}s)")
             time.sleep(1)
 
 

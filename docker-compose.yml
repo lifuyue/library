@@ -23,6 +23,11 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
@@ -42,12 +47,17 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   postgres:
     build:
       context: ./postgres
       dockerfile: Dockerfile
-    container_name: postgres
+  container_name: postgres
     environment:
       POSTGRES_USER: csuser
       POSTGRES_PASSWORD: change_me
@@ -63,6 +73,11 @@ services:
       default:
         aliases:
           - postgres
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   backend_uploads:

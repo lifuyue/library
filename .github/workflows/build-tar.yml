@@ -37,12 +37,12 @@ jobs:
           - service: backend
             context: backend
             dockerfile_prod: backend/Dockerfile.prod
-            dockerfile_dev: backend/Dockerfile
+            dockerfile_dev: backend/Dockerfile.dev
             image_name: myapp-backend
           - service: frontend
             context: frontend
             dockerfile_prod: frontend/Dockerfile.prod
-            dockerfile_dev: frontend/Dockerfile
+            dockerfile_dev: frontend/Dockerfile.dev
             image_name: myapp-frontend
           - service: postgres
             context: postgres
@@ -169,13 +169,38 @@ jobs:
       - name: Run containers with shared network
         run: |
           docker network create app-net || true
-          docker run -d --name postgresql --network app-net --network-alias postgresql \
+          docker run -d --name cslibrary-postgres --network app-net --network-alias postgresql \
+            --restart unless-stopped \
+            --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
             -e POSTGRES_DB=cslibrary -e POSTGRES_USER=csuser -e POSTGRES_PASSWORD=change_me \
-            ghcr.io/$OWNER_LC/myapp-postgres:$IMAGE_TAG
-          docker run -d --name backend --network app-net \
+            ghcr.io/$OWNER_LC/myapp-postgres:$IMAGE_TAG \
+            -c log_destination=stderr -c logging_collector=off -c log_min_messages=debug1 -c log_statement=all -c client_min_messages=log
+
+          docker run -d --name cslibrary-backend --network app-net \
+            --restart unless-stopped \
+            --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
             -e DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary \
             ghcr.io/$OWNER_LC/myapp-backend:$IMAGE_TAG
-          docker run -d --name frontend --network app-net \
-            -e DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary \
+
+          docker run -d --name cslibrary-frontend --network app-net \
+            --restart unless-stopped \
+            --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
             ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
+
+      - name: Warm up and show container logs
+        if: always()
+        run: |
+          sleep 5
+          echo "== docker ps =="
+          docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+          echo
+          echo "== postgres logs =="
+          docker logs --tail 200 cslibrary-postgres || true
+          echo
+          echo "== backend env & logs =="
+          docker inspect -f '{{json .Config.Env}}' cslibrary-backend | jq . || true
+          docker logs --tail 200 cslibrary-backend || true
+          echo
+          echo "== frontend logs =="
+          docker logs --tail 200 cslibrary-frontend || true
  

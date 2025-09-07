@@ -5,6 +5,10 @@
 .git
 .gitignore
 
+# Node dependencies
+node_modules/
+**/node_modules/
+
 # Python cache and compiled files
 __pycache__
 *.pyc
@@ -17,9 +21,9 @@ __pycache__
 dist
 build
 
-# Virtual environments
-.env*
-!.env
+# Virtual environments and env files
+.env
+.env.*
 .venv
 venv
 env
@@ -72,5 +76,3 @@ uploads
 data
 tmp
 
-# Allow including dev .env in build context (beware of secrets leakage)
-!.env

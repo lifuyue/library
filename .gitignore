@@ -14,9 +14,9 @@ pip-wheel-metadata/
 __pypackages__/
 
 # Env & local DBs
-.env
-.env.*
-!.env.example
+*.env
+!.env
+!.env.*
 .env.local
 .env.*.local
 *.sqlite*

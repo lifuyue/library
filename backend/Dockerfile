@@ -20,9 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy and install Python dependencies first for better layer caching
 # This layer will only be rebuilt when requirements.txt changes
-COPY requirements.txt ./
+COPY requirements.txt requirements.dev.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r requirements.txt
+    pip install -r requirements.dev.txt
 
 # Copy application code
 # .env files are deliberately excluded via dockerignore to avoid baking secrets

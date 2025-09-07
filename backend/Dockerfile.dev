@@ -15,9 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Pre-build wheels for faster installs in the runtime image
-COPY requirements.txt ./
+# Build dev requirements, which include runtime requirements via "-r requirements.txt"
+COPY requirements.txt requirements.dev.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
-    pip wheel --wheel-dir /wheels -r requirements.txt
+    pip wheel --wheel-dir /wheels -r requirements.dev.txt
 
 FROM python:3.11-slim AS runtime
 

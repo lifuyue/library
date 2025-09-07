@@ -16,9 +16,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and create wheels
-COPY requirements.txt ./
+ARG INCLUDE_DEV_REQS="false"
+COPY requirements.txt requirements.dev.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
-    pip wheel --wheel-dir /wheels -r requirements.txt
+    if [ "$INCLUDE_DEV_REQS" = "true" ]; then \
+        pip wheel --wheel-dir /wheels -r requirements.dev.txt; \
+    else \
+        pip wheel --wheel-dir /wheels -r requirements.txt; \
+    fi
 
 ## Runtime stage
 FROM python:3.11-slim AS runtime

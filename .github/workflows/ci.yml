@@ -69,11 +69,17 @@ jobs:
       - name: Frontend config check
         run: node scripts/check-frontend-config.js
 
-      - name: Start backend
-        run: docker compose --env-file .env.ci up -d backend
+      - name: Start frontend
+        run: docker compose --env-file .env.ci up -d frontend
 
-      - name: Connectivity check (backend exec)
-        run: docker compose --env-file .env.ci exec -T backend curl -sS -m 5 http://localhost:8000/healthz
+      - name: Prepare test image
+        run: docker compose --env-file .env.ci cp frontend/public/placeholder.jpg backend:/app/uploads/test.jpeg
+
+      - name: Nginx integration check
+        run: |
+          curl -fsI http://localhost/ | grep -i 'content-type: text/html'
+          curl -fsI http://localhost/api/healthz | grep -i '200'
+          curl -fsI http://localhost/uploads/test.jpeg | grep -i 'content-type: image'
 
       - name: Tear down
         if: always()

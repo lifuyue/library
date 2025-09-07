@@ -10,17 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare .env for CI
-        run: |
-          cat > .env.ci <<'EOF'
-          DATABASE_URL=postgresql+psycopg2://csuser:password@postgres:5432/cslibrary
-          ENVIRONMENT=production
-          HOST=0.0.0.0
-          PORT=8000
-          POSTGRES_DB=cslibrary
-          POSTGRES_USER=csuser
-          POSTGRES_PASSWORD=password
-          EOF
+
+      - name: Compose config check
+        run: docker compose --env-file .env.ci config > /dev/null
 
       - name: Build backend
         run: docker compose --env-file .env.ci build backend
@@ -39,6 +31,18 @@ jobs:
 
       - name: Run tests
         run: docker compose --env-file .env.ci run --rm backend pytest -q
+
+      - name: Build frontend
+        run: docker compose --env-file .env.ci build frontend
+
+      - name: Frontend config check
+        run: node scripts/check-frontend-config.js
+
+      - name: Start backend
+        run: docker compose --env-file .env.ci up -d backend
+
+      - name: Connectivity check
+        run: docker compose --env-file .env.ci run --rm frontend curl -sS -m 5 http://backend:8000/healthz
 
       - name: Tear down
         if: always()

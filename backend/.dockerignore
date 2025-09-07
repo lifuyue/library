@@ -52,14 +52,15 @@ Thumbs.db
 *.db-*
 *.sqlite*
 
-# Testing and coverage
+# Testing and coverage (keep tests in image for CI)
 .pytest_cache
 .coverage
 htmlcov
 .tox
 .cache
-tests
-test
+# do not ignore tests so CI can run them inside the container
+# tests
+# test
 *.lock
 
 # Documentation

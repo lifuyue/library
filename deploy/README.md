@@ -44,7 +44,7 @@ deploy/
 2. 选择仓库，Netlify 会自动检测 `netlify.toml`
 3. 设置环境变量：
    ```
-   VITE_API_BASE_URL=https://your-app.onrender.com
+   VITE_API_BASE=https://your-app.onrender.com
    ```
 4. 部署完成，记录前端 URL
 
@@ -73,7 +73,6 @@ docker-compose up --build
 
 ## 环境变量配置
 
-### 后端环境变量（PostgreSQL only）
 ```env
 # 数据库（同步栈; psycopg2 驱动）
 DATABASE_URL=postgresql+psycopg2://app:app@postgresql:5432/cslibrary
@@ -99,13 +98,13 @@ ENVIRONMENT=production
 
 ### 前端环境变量
 ```env
-VITE_API_BASE_URL=https://your-backend.com
+VITE_API_BASE=https://your-backend.com
 ```
 
 ## 监控和维护
 
 ### 健康检查
-- 后端：`GET /api/health`
+- 后端：`GET /healthz`
 - 前端：访问主页确认加载
 
 ### 日志查看

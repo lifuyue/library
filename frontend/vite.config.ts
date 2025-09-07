@@ -3,19 +3,31 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// https://vitejs.dev/config/
+const apiBase = process.env.VITE_API_BASE || 'http://backend:8000'
+
+console.log(`[vite] VITE_API_BASE: ${apiBase}`)
+
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    {
+      name: 'log-proxy',
+      configureServer() {
+        console.log(`[vite] proxy /api -> ${apiBase}`)
+      }
+    }
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
   server: {
+    host: true,
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: apiBase,
         changeOrigin: true
       }
     }

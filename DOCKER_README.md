@@ -64,7 +64,7 @@ CORS_ORIGINS=http://localhost:3000
 
 ### Frontend
 Environment variables are handled through Vite's built-in system:
-- `VITE_API_BASE_URL`: Backend API URL
+- `VITE_API_BASE`: Backend API URL
 
 ## File Structure
 ```

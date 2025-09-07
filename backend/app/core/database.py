@@ -12,12 +12,26 @@ from app.core.config import settings
 """
 
 SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL.strip()
+
+# Allow developers to omit the driver in DATABASE_URL. If a plain
+# ``postgresql://`` URL is provided, automatically upgrade it to the
+# required ``postgresql+psycopg://`` form so the application can start
+# without manual tweaks.
+if SQLALCHEMY_DATABASE_URL.startswith("postgresql://") and "+" not in SQLALCHEMY_DATABASE_URL.split("//", 1)[1]:
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace(
+        "postgresql://", "postgresql+psycopg://", 1
+    )
+
 if not SQLALCHEMY_DATABASE_URL:
-    raise RuntimeError("DATABASE_URL is required (e.g., postgresql+psycopg://user:pass@host:5432/db)")
+    raise RuntimeError(
+        "DATABASE_URL is required (e.g., postgresql+psycopg://user:pass@host:5432/db)"
+    )
 
 url_obj = make_url(SQLALCHEMY_DATABASE_URL)
 if url_obj.drivername not in {"postgresql+psycopg", "postgresql+asyncpg"}:
-    raise RuntimeError("DATABASE_URL must use postgresql+psycopg (or postgresql+asyncpg if async stack)")
+    raise RuntimeError(
+        "DATABASE_URL must use postgresql+psycopg (or postgresql+asyncpg if async stack)"
+    )
 
 engine = create_engine(url_obj, pool_pre_ping=True, future=True)
 

@@ -2,13 +2,13 @@
 # Multi-stage build for optimized static file serving
 
 # Build stage
-FROM node:20-alpine as builder
+FROM node:20-alpine AS BUILDER
 
 WORKDIR /app
 
-# Build-time API base
-ARG VITE_API_BASE=""
-ENV VITE_API_BASE=$VITE_API_BASE
+# Build-time API base (default to relative path for Nginx reverse proxy)
+ARG VITE_API_BASE="/api"
+ENV VITE_API_BASE=${VITE_API_BASE}
 
 # Copy package files and install dependencies
 COPY package*.json ./
@@ -19,26 +19,15 @@ COPY . .
 RUN npm run build
 
 # Production stage with Nginx
-FROM nginx:alpine as production
+FROM nginx:alpine AS PRODUCTION
 
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nginx -u 1001
-
-# Set proper permissions
-RUN chown -R nginx:nodejs /usr/share/nginx/html && \
-    chown -R nginx:nodejs /var/cache/nginx && \
-    chown -R nginx:nodejs /var/log/nginx && \
-    chown -R nginx:nodejs /etc/nginx/conf.d
-
-# Switch to non-root user
-USER nginx
+# Ensure static directory exists and set ownership for nginx worker
+RUN mkdir -p /usr/share/nginx/html
+# Copy built application from builder stage with proper ownership
+COPY --chown=nginx:nginx --from=BUILDER /app/dist /usr/share/nginx/html
 
 # Expose port 80
 EXPOSE 80

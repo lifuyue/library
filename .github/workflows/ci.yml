@@ -32,8 +32,33 @@ jobs:
       - name: Start backend
         run: docker compose --env-file .env.ci up -d backend
 
-      - name: Connectivity check
-        run: docker compose --env-file .env.ci exec -T backend curl -sS -m 5 http://localhost:8000/healthz
+      - name: Pre-check diagnostics
+        run: |
+          docker compose --env-file .env.ci ps
+          docker compose --env-file .env.ci logs --no-color --tail=200 backend || true
+
+      - name: Connectivity check (wait up to 30s)
+        run: |
+          docker compose --env-file .env.ci exec -T backend sh -lc '
+            i=0
+            until curl -fsS -m 5 http://localhost:8000/healthz; do
+              i=$((i+1))
+              if [ $i -ge 15 ]; then
+                echo "Backend not ready after ~30s"
+                exit 1
+              fi
+              echo "Waiting for backend... ($i/15)"
+              sleep 2
+            done
+          '
+
+      - name: Post-check diagnostics (on failure)
+        if: failure()
+        run: |
+          docker compose --env-file .env.ci ps
+          docker compose --env-file .env.ci logs --no-color --tail=300 backend || true
+          docker compose --env-file .env.ci exec -T backend sh -lc "ps -ef | grep -E 'gunicorn|uvicorn' | grep -v grep || true"
+          docker compose --env-file .env.ci exec -T backend sh -lc "command -v ss >/dev/null 2>&1 && ss -ltnp || (command -v netstat >/dev/null 2>&1 && netstat -ltnp) || true"
 
       - name: Run tests
         run: docker compose --env-file .env.ci run --rm backend pytest -q
@@ -47,8 +72,8 @@ jobs:
       - name: Start backend
         run: docker compose --env-file .env.ci up -d backend
 
-      - name: Connectivity check
-        run: docker compose --env-file .env.ci run --rm frontend curl -sS -m 5 http://backend:8000/healthz
+      - name: Connectivity check (backend exec)
+        run: docker compose --env-file .env.ci exec -T backend curl -sS -m 5 http://localhost:8000/healthz
 
       - name: Tear down
         if: always()

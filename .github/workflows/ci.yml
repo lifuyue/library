@@ -81,40 +81,40 @@ jobs:
           docker compose --env-file .env.ci ps
           docker compose --env-file .env.ci logs --no-color --tail=200 frontend || true
 
-      - name: Nginx integration check (wait up to 30s)
-        run: |
-          docker compose --env-file .env.ci exec -T frontend sh -lc '
-            i=0
-            until wget -qS --spider http://localhost/ 2>&1 | tr -d "\r" | grep -qiE "^\s*Content-Type:\s*text/html(\s*;.*)?$"; do
-              i=$((i+1))
-              if [ $i -ge 15 ]; then
-                echo "Nginx not serving text/html after ~30s"
-                exit 1
-              fi
-              echo "Waiting for Nginx static page... ($i/15)"
-              sleep 2
-            done
-          '
-
-      - name: Nginx Post-check diagnostics (on failure)
-        if: failure()
-        run: |
-          docker compose --env-file .env.ci ps
-          docker compose --env-file .env.ci logs --no-color --tail=300 frontend || true
-          docker compose --env-file .env.ci exec -T frontend sh -lc "ps -ef | grep nginx | grep -v grep || true"
-          docker compose --env-file .env.ci exec -T frontend sh -lc "nginx -T 2>/dev/null | sed -n '1,200p' || true"
-
-      - name: Start frontend
-        run: docker compose --env-file .env.ci up -d frontend
-
       - name: Prepare test image
         run: docker compose --env-file .env.ci cp frontend/public/placeholder.jpg backend:/app/uploads/test.jpeg
 
-      - name: Nginx integration check
+      - name: Frontend integration check (wait up to 60s)
         run: |
-          curl -fsI http://localhost/ | grep -i 'content-type: text/html'
-          curl -fsI http://localhost/api/healthz | grep -i '200'
-          curl -fsI http://localhost/uploads/test.jpeg | grep -i 'content-type: image'
+          i=0; ok=0
+          while [ $i -lt 30 ]; do
+            if docker compose --env-file .env.ci exec -T frontend sh -lc '
+              curl -fIs http://localhost/ | grep -q "200 OK" &&
+              [ -f /usr/share/nginx/html/index.html ]'; then
+              echo "[OK] Frontend index ready"; ok=1; break
+            fi
+            echo "Waiting for Nginx static page... ($((i+1))/30)"; i=$((i+1)); sleep 2
+          done
+          if [ $ok -ne 1 ]; then
+            echo "[FAIL] Nginx not ready in time"
+            docker compose --env-file .env.ci exec -T frontend sh -lc 'ps aux | grep nginx; nginx -T | sed -n "1,200p"; ls -lah /usr/share/nginx/html/; head -n 20 /usr/share/nginx/html/index.html; getent hosts backend || true; curl -i http://localhost/ || true'
+            docker compose --env-file .env.ci ps
+            docker compose --env-file .env.ci logs --tail=200 frontend || true
+            exit 1
+          fi
+          i=0; ok=0
+          while [ $i -lt 30 ]; do
+            if docker compose --env-file .env.ci exec -T frontend sh -lc 'curl -fsS http://localhost/api/healthz >/dev/null'; then
+              echo "[OK] /api proxy works"; ok=1; break
+            fi
+            echo "Waiting for /api proxy... ($((i+1))/30)"; i=$((i+1)); sleep 2
+          done
+          if [ $ok -ne 1 ]; then
+            echo "[FAIL] /api proxy not working"
+            docker compose --env-file .env.ci exec -T frontend sh -lc 'getent hosts backend || true; curl -i http://localhost/api/healthz || true'
+            exit 1
+          fi
+          docker compose --env-file .env.ci exec -T frontend sh -lc 'curl -fI http://localhost/uploads/test.jpeg | grep -i "Content-Type: image"'
 
       - name: Tear down
         if: always()

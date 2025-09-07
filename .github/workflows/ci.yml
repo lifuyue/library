@@ -8,24 +8,32 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      SECRET_KEY: ${{ secrets.SECRET_KEY }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build services
-        run: docker compose build
+      - name: Prepare .env for CI
+        run: |
+          cat > .env.ci <<'EOF'
+          DATABASE_URL=postgresql+psycopg://csuser:password@postgres:5432/cslibrary
+          ENVIRONMENT=production
+          HOST=0.0.0.0
+          PORT=8000
+          POSTGRES_DB=cslibrary
+          POSTGRES_USER=csuser
+          POSTGRES_PASSWORD=password
+          EOF
 
       - name: Start database
-        run: docker compose up -d postgres
+        run: docker compose --env-file .env.ci up -d postgres
+
+      - name: Build backend
+        run: docker compose --env-file .env.ci build backend
 
       - name: Run migrations
-        run: docker compose run --rm backend alembic upgrade head
+        run: docker compose --env-file .env.ci run --rm backend alembic upgrade head
 
       - name: Run tests
-        run: docker compose run --rm backend pytest
+        run: docker compose --env-file .env.ci run --rm backend pytest -q
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose --env-file .env.ci down -v

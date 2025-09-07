@@ -25,7 +25,8 @@ RUN pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
 
 # Copy application code
-# In development, this will be overridden by volume mount
+# .env files are deliberately excluded via dockerignore to avoid baking secrets
+# into the image. In development, this will be overridden by a volume mount.
 COPY . .
 
 # Create uploads directory

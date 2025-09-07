@@ -1,24 +1,14 @@
-# Development Docker Compose Configuration
-# Usage: docker compose -f docker-compose.dev.yml up
-# Features: Hot reload, volume mounts, development optimizations
-
 services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile.dev
-    container_name: dev-backend
+      dockerfile: ${BACKEND_DOCKERFILE}
+    env_file: .env
     ports:
-      - "8000:8000"
-    env_file:
-      - ./backend/.env
-    environment:
-      - ENVIRONMENT=development
-      - PYTHONPATH=/app
+      - "${BACKEND_PORT}:8000"
     volumes:
       - ./backend:/app
       - backend_uploads:/app/uploads
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       postgres:
         condition: service_healthy
@@ -31,19 +21,14 @@ services:
 
   frontend:
     build:
-      context: ./frontend  
-      dockerfile: Dockerfile.dev
-    container_name: dev-frontend
+      context: ./frontend
+      dockerfile: ${FRONTEND_DOCKERFILE}
+    env_file: .env
     ports:
-      - "3000:3000"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8000
-      - NODE_ENV=development
-      - DATABASE_URL=postgres://csuser:change_me@postgres:5432/cslibrary
+      - "${FRONTEND_PORT}:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     depends_on:
       - backend
     restart: unless-stopped
@@ -57,22 +42,21 @@ services:
     build:
       context: ./postgres
       dockerfile: Dockerfile
-  container_name: postgres
+    env_file: .env
+    ports:
+      - "${POSTGRES_PORT}:5432"
     environment:
-      POSTGRES_USER: csuser
-      POSTGRES_PASSWORD: change_me
-      POSTGRES_DB: cslibrary
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U csuser -d cslibrary"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
     volumes:
       - db_data:/var/lib/postgresql/data
-    networks:
-      default:
-        aliases:
-          - postgres
+    restart: unless-stopped
     logging:
       driver: json-file
       options:

@@ -37,6 +37,12 @@ jobs:
       - name: Run migrations
         run: docker compose --env-file .env.ci run --rm backend alembic upgrade head
 
+      - name: Start backend
+        run: docker compose --env-file .env.ci up -d backend
+
+      - name: Connectivity check
+        run: docker compose --env-file .env.ci exec -T backend curl -sS -m 5 http://localhost:8000/healthz
+
       - name: Run tests
         run: docker compose --env-file .env.ci run --rm backend pytest -q
 

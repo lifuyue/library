@@ -5,11 +5,12 @@ from typing import List
 
 from dotenv import load_dotenv
 
-# Load .env from default location and explicitly from /app/.env when running in container
-load_dotenv()
-app_env = Path('/app/.env')
-if app_env.exists():
-    load_dotenv(dotenv_path=app_env)
+# Load .env in development only if present
+if os.getenv("ENVIRONMENT", "development") == "development":
+    load_dotenv()
+    app_env = Path('/app/.env')
+    if app_env.exists():
+        load_dotenv(dotenv_path=app_env)
 
 class Settings:
     # JWT 配置

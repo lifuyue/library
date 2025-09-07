@@ -1,8 +1,8 @@
 # Backend Production Dockerfile
 # Multi-stage build for optimized production image
 
-# Build stage
-FROM python:3.11-slim as builder
+## Build stage
+FROM python:3.11-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1
@@ -20,8 +20,8 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
     pip wheel --wheel-dir /wheels -r requirements.txt
 
-# Runtime stage
-FROM python:3.11-slim as runtime
+## Runtime stage
+FROM python:3.11-slim AS runtime
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -42,9 +42,6 @@ RUN pip install --no-cache-dir /wheels/*
 
 # Copy application code
 COPY . .
-
-# Copy .env into image (security risk; ensure secrets hygiene)
-COPY .env /app/.env
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser && \

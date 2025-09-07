@@ -28,12 +28,13 @@ def main():
     logging.basicConfig(level=logging.INFO, format="[wait_for_db] %(message)s")
     logger = logging.getLogger(__name__)
 
-    # Load .env from default location and explicitly from /app/.env when running in container
-    load_dotenv()
-    app_env = Path('/app/.env')
-    if app_env.exists():
-        logger.info(f"loading env from {app_env}")
-        load_dotenv(dotenv_path=app_env)
+    # Load .env for development if present
+    if os.getenv("ENVIRONMENT", "development") == "development":
+        load_dotenv()
+        app_env = Path('/app/.env')
+        if app_env.exists():
+            logger.info(f"loading env from {app_env}")
+            load_dotenv(dotenv_path=app_env)
 
     database_url_raw = os.getenv("DATABASE_URL")
     logger.info(f"raw DATABASE_URL: {database_url_raw}")

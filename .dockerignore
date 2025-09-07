@@ -1,0 +1,21 @@
+# Root Docker build context exclusions
+
+.env
+.env.*
+!.env.example
+.git
+.git/
+node_modules
+**/node_modules
+__pycache__
+**/__pycache__
+venv
+.venv
+**/venv
+**/.venv
+.pytest_cache
+**/.pytest_cache
+dist
+build
+*.log
+

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build services
+        run: docker compose build
+
+      - name: Start database
+        run: docker compose up -d postgres
+
+      - name: Run migrations
+        run: docker compose run --rm backend alembic upgrade head
+
+      - name: Run tests
+        run: docker compose run --rm backend pytest
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

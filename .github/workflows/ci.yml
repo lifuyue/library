@@ -13,7 +13,7 @@ jobs:
       - name: Prepare .env for CI
         run: |
           cat > .env.ci <<'EOF'
-          DATABASE_URL=postgresql+psycopg://csuser:password@postgres:5432/cslibrary
+          DATABASE_URL=postgresql+psycopg2://csuser:password@postgres:5432/cslibrary
           ENVIRONMENT=production
           HOST=0.0.0.0
           PORT=8000
@@ -22,11 +22,17 @@ jobs:
           POSTGRES_PASSWORD=password
           EOF
 
-      - name: Start database
-        run: docker compose --env-file .env.ci up -d postgres
-
       - name: Build backend
         run: docker compose --env-file .env.ci build backend
+
+      - name: Verify Python and deps
+        run: |
+          docker compose --env-file .env.ci run --rm backend python -c "import sys; print(sys.version)"
+          docker compose --env-file .env.ci run --rm backend python -c "import psycopg2, sqlalchemy, alembic; print('deps ok')"
+          docker compose --env-file .env.ci run --rm backend python -m pip check
+
+      - name: Start database
+        run: docker compose --env-file .env.ci up -d postgres
 
       - name: Run migrations
         run: docker compose --env-file .env.ci run --rm backend alembic upgrade head

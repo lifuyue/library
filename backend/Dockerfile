@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # This layer will only be rebuilt when requirements.txt changes
 COPY requirements.txt requirements.dev.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
+    pip install -r requirements.txt && \
     pip install -r requirements.dev.txt
 
 # Copy application code

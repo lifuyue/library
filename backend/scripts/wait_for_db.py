@@ -7,14 +7,14 @@ import socket
 
 from dotenv import load_dotenv
 from pathlib import Path
-import psycopg
+import psycopg2
 
 
 def normalize_db_url(url: str) -> str:
-    """Normalize SQLAlchemy-style 'postgresql+driver://' URLs to plain 'postgresql://' for psycopg.
+    """Normalize SQLAlchemy-style 'postgresql+driver://' URLs to plain 'postgresql://' for psycopg2.
 
     Examples:
-        postgresql+psycopg://user:pass@host:5432/db -> postgresql://user:pass@host:5432/db
+        postgresql+psycopg2://user:pass@host:5432/db -> postgresql://user:pass@host:5432/db
         postgresql+asyncpg://u:p@h/db -> postgresql://u:p@h/db
     If it already matches plain postgresql:// it is returned unchanged.
     """
@@ -64,8 +64,9 @@ def main():
     start = time.time()
     while True:
         try:
-            with psycopg.connect(db_url) as conn:
-                conn.execute("SELECT 1")
+            with psycopg2.connect(db_url) as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
             logger.info("database is ready")
             break
         except Exception as e:

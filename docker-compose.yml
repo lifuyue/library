@@ -16,8 +16,7 @@ services:
       - ./backend:/app
       - backend_uploads:/app/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     restart: unless-stopped
     logging:
       driver: json-file

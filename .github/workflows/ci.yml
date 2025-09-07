@@ -64,10 +64,45 @@ jobs:
         run: docker compose --env-file .env.ci run --rm backend pytest -q
 
       - name: Build frontend
-        run: docker compose --env-file .env.ci build frontend
+        run: |
+          FRONTEND_DOCKERFILE=frontend/Dockerfile.prod \
+          docker compose --env-file .env.ci build --build-arg VITE_API_BASE=/api frontend
 
       - name: Frontend config check
         run: node scripts/check-frontend-config.js
+
+      - name: Start frontend (prod)
+        run: |
+          FRONTEND_DOCKERFILE=frontend/Dockerfile.prod \
+          docker compose --env-file .env.ci up -d frontend
+
+      - name: Nginx Pre-check diagnostics
+        run: |
+          docker compose --env-file .env.ci ps
+          docker compose --env-file .env.ci logs --no-color --tail=200 frontend || true
+
+      - name: Nginx integration check (wait up to 30s)
+        run: |
+          docker compose --env-file .env.ci exec -T frontend sh -lc '
+            i=0
+            until wget -qS --spider http://localhost/ 2>&1 | tr -d "\r" | grep -qiE "^\s*Content-Type:\s*text/html(\s*;.*)?$"; do
+              i=$((i+1))
+              if [ $i -ge 15 ]; then
+                echo "Nginx not serving text/html after ~30s"
+                exit 1
+              fi
+              echo "Waiting for Nginx static page... ($i/15)"
+              sleep 2
+            done
+          '
+
+      - name: Nginx Post-check diagnostics (on failure)
+        if: failure()
+        run: |
+          docker compose --env-file .env.ci ps
+          docker compose --env-file .env.ci logs --no-color --tail=300 frontend || true
+          docker compose --env-file .env.ci exec -T frontend sh -lc "ps -ef | grep nginx | grep -v grep || true"
+          docker compose --env-file .env.ci exec -T frontend sh -lc "nginx -T 2>/dev/null | sed -n '1,200p' || true"
 
       - name: Start frontend
         run: docker compose --env-file .env.ci up -d frontend

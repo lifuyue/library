@@ -5,9 +5,6 @@
 ############################################################
 -r requirements.txt
 
-# Ensure DB driver available in development environment
-psycopg2-binary>=2.9.7
-
 # 代码质量 / 静态检查
 black>=24.4,<25.0
 isort>=5.13,<6.0

@@ -23,7 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt requirements.dev.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt && \
-    pip install -r requirements.dev.txt
+    pip install -r requirements.dev.txt && \
+    python -m pip check
 
 # Copy application code
 # .env files are deliberately excluded via dockerignore to avoid baking secrets

@@ -43,7 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python packages from wheels (faster, no compilation needed)
 COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/*
+RUN pip install --no-cache-dir /wheels/* && \
+    python -m pip check
 
 # Copy application code
 COPY . .

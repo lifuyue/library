@@ -73,6 +73,10 @@ cp .env.example .env
 
 本地开发可将 `.env.example` 复制为 `.env` 提供默认变量；CI 和生产环境通过运行时注入环境变量，无需 `.env` 文件。后端在开发模式下会尝试加载 `.env`（若存在），生产环境仅读取进程环境变量。
 
+> **前端 API 地址配置**
+> - **容器开发模式**：确保 `.env` 或 `frontend/.env.development` 中 `VITE_API_BASE=http://backend:8000`，再通过 `docker compose up` 一键启动。
+> - **本地直连模式**：若直接访问本机后端，请设置 `VITE_API_BASE=http://127.0.0.1:8000`，并在后端开启允许该来源的 CORS。
+
 ### Docker Compose 启动（PostgreSQL）
 
 ```bash
@@ -89,7 +93,7 @@ make dev-build
 docker compose logs -f backend
 ```
 
-应用启动后可访问 `http://localhost:8000/api/health` 进行检查。
+应用启动后可访问 `http://localhost:8000/healthz` 进行检查。
 
 ### 使用 Makefile（推荐）
 
@@ -213,8 +217,8 @@ npm run dev
 
 ### 健康检查
 
-- 后端：`GET /api/health` 返回 200
-- Docker Compose 内置 `healthcheck`，容器会等待依赖就绪
+- 后端：`GET /healthz` 返回 200
+  - Docker Compose 内置 `healthcheck`，容器会等待依赖就绪
 
 ### 生产部署（Route B：Nginx 反向代理，单一入口）
 
@@ -229,7 +233,7 @@ npm run dev
 docker compose up -d --build
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 curl -i http://127.0.0.1/
-curl -i http://127.0.0.1/api/health
+curl -i http://127.0.0.1/healthz
 ```
 
 ## 数据库迁移

@@ -16,6 +16,8 @@ __pypackages__/
 # Env & local DBs
 .env
 .env.*
+!.env.ci
+!frontend/.env.development
 .env.local
 .env.*.local
 *.sqlite*

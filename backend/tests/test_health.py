@@ -19,3 +19,15 @@ def test_root_endpoint_returns_200():
     resp = client.get("/")
     assert resp.status_code == 200
     assert "message" in resp.json()
+
+
+def test_healthz_endpoint_returns_200():
+    resp = client.get("/api/healthz")
+    assert resp.status_code == 200
+    assert resp.json().get("status") == "healthy"
+
+
+def test_root_healthz_returns_200():
+    resp = client.get("/healthz")
+    assert resp.status_code == 200
+    assert resp.json().get("status") == "healthy"

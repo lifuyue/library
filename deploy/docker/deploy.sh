@@ -90,7 +90,7 @@ done
 echo ""
 echo "🔍 等待后端服务..."
 for i in {1..60}; do
-    if curl -f http://localhost:8000/api/health >/dev/null 2>&1; then
+    if curl -f http://localhost:8000/healthz >/dev/null 2>&1; then
         echo "✅ 后端服务就绪"
         break
     fi

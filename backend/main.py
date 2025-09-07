@@ -59,6 +59,8 @@ async def health_check_db(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="database not available")
 
 @app.get("/api/health")
+@app.get("/api/healthz")
+@app.get("/healthz")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
 

@@ -2,6 +2,7 @@ import axios from 'axios'
 import type { Material, MaterialResponse, Category } from '@/types'
 import type { LoginForm, RegisterForm, AuthResponse, User } from '@/types/auth'
 import type { AdminStats, AdminUser } from '@/types/admin'
+
 const api = axios.create({
   baseURL: '/api',
   timeout: 10000,
@@ -10,31 +11,39 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    // 添加 Authorization header
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
 // 响应拦截器
 api.interceptors.response.use(
-  (response) => {
-    return response.data
-  },
+  (response) => response.data,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token 过期或无效，清除本地存储
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
+    const { config, response, code, message } = error
+    const method = config?.method?.toUpperCase()
+    const url = `${config?.baseURL || ''}${config?.url || ''}`
+    const retry = (config as any)?.__retryCount || 0
+
+    if (response) {
+      console.error(
+        `[HTTP ${response.status}] ${method} ${url} (retry: ${retry})`,
+        response.data
+      )
+      if (response.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+      }
+    } else {
+      console.error(
+        `[Network ${code || 'ERR'}] ${method} ${url} (retry: ${retry}) - ${message}`
+      )
     }
-    console.error('API Error:', error)
     return Promise.reject(error)
   }
 )

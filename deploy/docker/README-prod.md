@@ -35,7 +35,7 @@ docker compose -f docker-compose.prod.yml logs -f backend
 ## 4. Access
 - Frontend: http://SERVER_IP/
 - API docs (through direct backend port if you temporarily map it) else via proxy `/api/*`.
-- Health: http://SERVER_IP/api/health
+- Health: http://SERVER_IP/healthz
 
 ## 5. Volumes (Persistence)
 - PostgreSQL data: `pg_data`
@@ -73,7 +73,7 @@ docker compose -f docker-compose.prod.yml restart backend
 
 ## 9. Health & Troubleshooting
 ```bash
-curl -v http://SERVER_IP/api/health
+curl -v http://SERVER_IP/healthz
 curl -v http://SERVER_IP/api/materials
 ```
 Check container logs for backend/db errors.

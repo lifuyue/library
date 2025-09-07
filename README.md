@@ -68,11 +68,10 @@ library/
 ### 配置环境变量
 
 ```bash
-cp backend/.env.example backend/.env
+cp .env.example .env
 ```
 
-后端启动时会使用 `python-dotenv` 自动加载 `.env` 文件中的变量，无需手动 `export`。
-启动脚本会在连接数据库前等待数据库服务就绪，若 `DATABASE_URL` 未配置将会提示错误并停止启动。
+本地开发可将 `.env.example` 复制为 `.env` 提供默认变量；CI 和生产环境通过运行时注入环境变量，无需 `.env` 文件。后端在开发模式下会尝试加载 `.env`（若存在），生产环境仅读取进程环境变量。
 
 ### Docker Compose 启动（PostgreSQL）
 
@@ -137,7 +136,7 @@ Windows 用户指南（不再提供 .bat/.cmd）：
 - 或在 PowerShell 中等价运行：
   - 后端开发：`python -m uvicorn backend.main:app --reload`
   - 前端开发：`cd frontend; npm run dev`
-  - Docker：`docker compose -f deploy/docker/docker-compose.yml up -d`
+  - Docker：`docker compose up -d`
 
 ### 开发环境启动
 
@@ -227,7 +226,7 @@ npm run dev
 
 验证命令：
 ```bash
-docker compose -f deploy/docker/docker-compose.yml --env-file deploy/docker/.env.deploy up -d --build
+docker compose up -d --build
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 curl -i http://127.0.0.1/
 curl -i http://127.0.0.1/api/health
@@ -371,7 +370,7 @@ python backend/scripts/reset_admin.py --force --password 新密码123
 
 ## 常见问题
 
-- 数据库连接失败：确认 `.env` 中的 `DATABASE_URL` 与 Compose 配置一致，并确保 `db` 服务健康。
+- 数据库连接失败：确认环境变量 `DATABASE_URL` 与 Compose 配置一致，并确保 `db` 服务健康。
 - 权限问题：卷挂载目录需具备读写权限。
 - 重复迁移：若 `alembic` 报错，检查并清理 `alembic_version` 表后重试。
 

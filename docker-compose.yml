@@ -16,7 +16,7 @@ services:
       - postgres
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
@@ -52,7 +52,7 @@ services:
       - cslibrary-net
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost/"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
 

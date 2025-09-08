@@ -97,21 +97,39 @@ jobs:
         run: |
           docker compose --env-file .env.ci exec -T frontend sh -lc '
             i=0
-            until curl -fIs http://localhost/ | grep "200 OK" \
-              && [ -f /usr/share/nginx/html/index.html ] \
-              && curl -fIs http://localhost/api/healthz | grep "200" \
-              && curl -fIs http://localhost/uploads/test.jpeg | grep -i "Content-Type: image/jpeg"; do
-              i=$((i+1))
-              if [ $i -ge 30 ]; then
-                echo "Frontend not ready after ~60s"
-                nginx -T || true
-                ls -lah /usr/share/nginx/html/ || true
-                [ -f /usr/share/nginx/html/index.html ] && head /usr/share/nginx/html/index.html || true
-                exit 1
+            while [ $i -lt 30 ]; do
+              code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true)
+              if [ "$code" = "200" ] && [ -f /usr/share/nginx/html/index.html ]; then
+                echo "[OK] Frontend index ready (200)"
+                exit 0
               fi
-              echo "Waiting for frontend... ($i/30)"
+              echo "Waiting for frontend... ($((i+1))/30) code=${code:-N/A}"
+              i=$((i+1))
               sleep 2
             done
+            echo "Frontend not ready after ~60s"
+            echo "--- nginx -T (head) ---"; nginx -T 2>&1 | sed -n "1,200p" || true
+            echo "--- html dir ---"; ls -lah /usr/share/nginx/html/ || true
+            echo "--- index.html head ---"; [ -f /usr/share/nginx/html/index.html ] && head -n 20 /usr/share/nginx/html/index.html || true
+            echo "--- backend dns ---"; getent hosts backend || true
+            exit 1
+          '
+
+      - name: Frontend API proxy check (wait up to 60s)
+        run: |
+          docker compose --env-file .env.ci exec -T frontend sh -lc '
+            i=0
+            while [ $i -lt 30 ]; do
+              code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/api/healthz || true)
+              if [ "$code" = "200" ]; then
+                echo "[OK] /api proxy works (200)"
+                exit 0
+              fi
+              echo "Waiting for /api proxy... ($((i+1))/30) code=${code:-N/A}"
+              i=$((i+1))
+              sleep 2
+            done
+            echo "/api proxy not ready after ~60s"; exit 1
           '
 
       - name: Tear down

@@ -8,7 +8,7 @@ WORKDIR /app
 ARG VITE_API_BASE="/api"
 ENV VITE_API_BASE=${VITE_API_BASE}
 
-# Install dependencies and build
+# Copy package files and install dependencies, then build
 COPY package*.json ./
 RUN npm ci
 COPY . .
@@ -20,11 +20,16 @@ FROM nginx:alpine AS production
 # Install curl for health checks
 RUN apk add --no-cache curl
 
-# Copy Nginx configuration
-COPY conf.d/default.conf /etc/nginx/conf.d/default.conf
-
-# Copy built assets
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Ensure static directory exists and set ownership for nginx worker
+RUN mkdir -p /usr/share/nginx/html
+# Copy built application from builder stage with proper ownership
+COPY --chown=nginx:nginx --from=builder /app/dist /usr/share/nginx/html
 
 EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -fsS http://localhost/ || exit 1
+
+# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]

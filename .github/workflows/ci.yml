@@ -11,6 +11,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Prepare .env for CI
+        run: |
+          cat > .env.ci <<'EOF'
+          DATABASE_URL=postgresql+psycopg2://csuser:password@postgres:5432/cslibrary
+          ENVIRONMENT=production
+          HOST=0.0.0.0
+          PORT=8000
+          POSTGRES_DB=cslibrary
+          POSTGRES_USER=csuser
+          POSTGRES_PASSWORD=password
+          BACKEND_DOCKERFILE=Dockerfile
+          FRONTEND_DOCKERFILE=Dockerfile.prod
+          BACKEND_PORT=8000
+          FRONTEND_PORT=80
+          POSTGRES_PORT=5432
+          EOF
+
       - name: Compose config check
         run: docker compose --env-file .env.ci config > /dev/null
 

@@ -66,17 +66,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
-        env:
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          USERNAME="${GHCR_USERNAME:-$GITHUB_ACTOR}"
-          PASSWORD="${GHCR_TOKEN:-$GITHUB_TOKEN}"
-          echo "$PASSWORD" | docker login ghcr.io -u "$USERNAME" --password-stdin
-
       - name: Build ${{ matrix.service }} and export docker-tar
         run: |
           OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
@@ -92,6 +81,25 @@ jobs:
             --output "type=docker,dest=${OUT_BASENAME}.tar"
           echo "Built image: $IMAGE_NAME:$IMAGE_TAG -> ${OUT_BASENAME}.tar"
           ls -lh "${OUT_BASENAME}.tar"
+
+      - name: GHCR preflight connectivity check (retry)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 1
+          max_attempts: 4
+          retry_on: error
+          command: |
+            curl -fsS -m 5 -I https://ghcr.io/v2/ | sed -n '1,3p'
+
+      - name: Login to GHCR (retry up to 5)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 2
+          max_attempts: 5
+          retry_on: error
+          command: |
+            echo "${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}" | \
+            docker login ghcr.io -u "${{ secrets.GHCR_USERNAME || github.actor }}" --password-stdin
 
       - name: Push image to GitHub Container Registry
         run: |
@@ -151,16 +159,25 @@ jobs:
       OWNER_LC: ${{ github.repository_owner }}
       IMAGE_TAG: ${{ inputs.image_tag }}
     steps:
-      - name: Log in to GHCR
-        env:
-          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          USERNAME="${GHCR_USERNAME:-$GITHUB_ACTOR}"
-          PASSWORD="${GHCR_TOKEN:-$GITHUB_TOKEN}"
-          echo "$PASSWORD" | docker login ghcr.io -u "$USERNAME" --password-stdin
+      - name: GHCR preflight connectivity check (retry)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 1
+          max_attempts: 4
+          retry_on: error
+          command: |
+            curl -fsS -m 5 -I https://ghcr.io/v2/ | sed -n '1,3p'
+
+      - name: Login to GHCR (retry up to 5)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 2
+          max_attempts: 5
+          retry_on: error
+          command: |
+            echo "${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}" | \
+            docker login ghcr.io -u "${{ secrets.GHCR_USERNAME || github.actor }}" --password-stdin
+
       - name: Pull images from GitHub Container Registry
         run: |
           docker pull ghcr.io/$OWNER_LC/myapp-postgres:$IMAGE_TAG

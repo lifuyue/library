@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-  pull_request: {}
+  pull_request:
 
 jobs:
   test:
@@ -114,6 +114,6 @@ jobs:
             done
           '
 
-  - name: Tear down
+      - name: Tear down
         if: always()
         run: docker compose --env-file .env.ci down -v

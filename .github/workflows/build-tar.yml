@@ -187,6 +187,28 @@ jobs:
             --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
             ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
 
+      - name: Probe frontend container (wait up to 60s)
+        run: |
+          docker exec cslibrary-frontend sh -lc '
+            which curl || apk add --no-cache curl >/dev/null 2>&1 || true
+            i=0
+            while [ $i -lt 30 ]; do
+              code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true)
+              if [ "$code" = "200" ] && [ -f /usr/share/nginx/html/index.html ]; then
+                echo "[OK] frontend ready"
+                exit 0
+              fi
+              echo "Waiting for frontend... ($((i+1))/30) code=${code:-N/A}"
+              i=$((i+1))
+              sleep 2
+            done
+            echo "Frontend not ready after ~60s"
+            echo "--- nginx -T (head) ---"; nginx -T 2>&1 | sed -n "1,200p" || true
+            echo "--- html dir ---"; ls -lah /usr/share/nginx/html/ || true
+            echo "--- index.html head ---"; [ -f /usr/share/nginx/html/index.html ] && head -n 20 /usr/share/nginx/html/index.html || true
+            exit 1
+          '
+
       - name: Probe frontend container
         run: |
           docker exec -it cslibrary-frontend sh -lc 'apk add --no-cache curl >/dev/null 2>&1 || true; for i in $(seq 1 30); do code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true); if [ "$code" = "200" ] && [ -f /usr/share/nginx/html/index.html ]; then echo "[OK] frontend ready"; exit 0; fi; echo "Waiting frontend ($i/30)"; sleep 2; done; echo "[FAIL] frontend not ready"; nginx -T | sed -n "1,200p"; exit 1'

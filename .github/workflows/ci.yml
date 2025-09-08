@@ -58,7 +58,7 @@ jobs:
         run: |
           docker compose --env-file .env.ci exec -T backend sh -lc '
             i=0
-            until curl -fsS -m 5 http://localhost:8000/healthz; do
+            until curl -fsS -m 5 http://127.0.0.1:8000/healthz; do
               i=$((i+1))
               if [ $i -ge 15 ]; then
                 echo "Backend not ready after ~30s"
@@ -98,7 +98,7 @@ jobs:
           docker compose --env-file .env.ci exec -T frontend sh -lc '
             i=0
             while [ $i -lt 30 ]; do
-              if wget --spider -q http://localhost/ && [ -f /usr/share/nginx/html/index.html ]; then
+              if wget --spider -q http://127.0.0.1/ && [ -f /usr/share/nginx/html/index.html ]; then
                 echo "[OK] Frontend index ready (200)"
                 exit 0
               fi
@@ -119,7 +119,7 @@ jobs:
           docker compose --env-file .env.ci exec -T frontend sh -lc '
             i=0
             while [ $i -lt 30 ]; do
-              if wget --spider -q http://localhost/api/healthz; then
+              if wget --spider -q http://127.0.0.1/api/healthz; then
                 echo "[OK] /api proxy works (200)"
                 exit 0
               fi
@@ -130,14 +130,14 @@ jobs:
             echo "/api proxy not ready after ~60s"
             echo "--- nginx -T (head) ---"; nginx -T 2>&1 | sed -n "1,200p" || true
             echo "--- backend dns ---"; getent hosts backend || true
-            echo "--- /api/healthz (headers) ---"; wget -S --spider http://localhost/api/healthz || true
+            echo "--- /api/healthz (headers) ---"; wget -S --spider http://127.0.0.1/api/healthz || true
             exit 1
           '
 
       - name: Frontend API list endpoint check (materials)
         run: |
           docker compose --env-file .env.ci exec -T frontend sh -lc '
-            wget -S --spider http://localhost/api/materials/?page=1&size=1 2>&1 | sed -n "1,5p" || exit 1
+            wget -S --spider http://127.0.0.1/api/materials/?page=1&size=1 2>&1 | sed -n "1,5p" || exit 1
           '
 
       - name: Tear down

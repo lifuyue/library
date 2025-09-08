@@ -51,7 +51,7 @@ services:
     networks:
       - cslibrary-net
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost/ && wget --spider -q http://localhost/api/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1/ && wget --spider -q http://127.0.0.1/api/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

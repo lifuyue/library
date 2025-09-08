@@ -180,6 +180,7 @@ jobs:
             --restart unless-stopped \
             --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
             -e DATABASE_URL=postgresql+psycopg://csuser:change_me@postgresql:5432/cslibrary \
+            --network-alias backend \
             ghcr.io/$OWNER_LC/myapp-backend:$IMAGE_TAG
 
           docker run -d --name cslibrary-frontend --network app-net \
@@ -187,18 +188,41 @@ jobs:
             --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
             ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
 
+      - name: Wait frontend container running (up to 30s)
+        run: |
+          i=0
+          until [ "$(docker inspect -f '{{.State.Running}}' cslibrary-frontend 2>/dev/null || echo false)" = "true" ]; do
+            i=$((i+1))
+            if [ $i -ge 15 ]; then
+              echo "Container cslibrary-frontend not running after ~30s"
+              docker ps -a || true
+              docker inspect cslibrary-frontend || true
+              docker logs --tail 200 cslibrary-frontend || true
+              exit 1
+            fi
+            echo "Waiting for cslibrary-frontend to be running... ($i/15)"
+            sleep 2
+          done
+          echo "[OK] cslibrary-frontend is running"
+
       - name: Probe frontend container (wait up to 60s)
         run: |
           docker exec cslibrary-frontend sh -lc '
             which curl || apk add --no-cache curl >/dev/null 2>&1 || true
             i=0
             while [ $i -lt 30 ]; do
-              code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true)
-              if [ "$code" = "200" ] && [ -f /usr/share/nginx/html/index.html ]; then
+              echo "--- iteration $((i+1)) ---"
+              echo "[ps]"; ps aux || true
+              echo "[sockets]"; (command -v ss >/dev/null 2>&1 && ss -lntp) || (command -v netstat >/dev/null 2>&1 && netstat -tlnp) || true
+              code_root=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true)
+              code_api=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/api/healthz || true)
+              echo "[curl] GET / -> code=${code_root:-N/A}"
+              echo "[curl] GET /api/healthz -> code=${code_api:-N/A}"
+              if [ "$code_root" = "200" ] && [ -f /usr/share/nginx/html/index.html ] && [ "$code_api" = "200" ]; then
                 echo "[OK] frontend ready"
                 exit 0
               fi
-              echo "Waiting for frontend... ($((i+1))/30) code=${code:-N/A}"
+              echo "Waiting for frontend... ($((i+1))/30) root=${code_root:-N/A} api=${code_api:-N/A}"
               i=$((i+1))
               sleep 2
             done
@@ -206,12 +230,11 @@ jobs:
             echo "--- nginx -T (head) ---"; nginx -T 2>&1 | sed -n "1,200p" || true
             echo "--- html dir ---"; ls -lah /usr/share/nginx/html/ || true
             echo "--- index.html head ---"; [ -f /usr/share/nginx/html/index.html ] && head -n 20 /usr/share/nginx/html/index.html || true
+            echo "--- nginx error.log (tail 200) ---"; [ -f /var/log/nginx/error.log ] && tail -n 200 /var/log/nginx/error.log || true
             exit 1
           '
 
-      - name: Probe frontend container
-        run: |
-          docker exec -it cslibrary-frontend sh -lc 'apk add --no-cache curl >/dev/null 2>&1 || true; for i in $(seq 1 30); do code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true); if [ "$code" = "200" ] && [ -f /usr/share/nginx/html/index.html ]; then echo "[OK] frontend ready"; exit 0; fi; echo "Waiting frontend ($i/30)"; sleep 2; done; echo "[FAIL] frontend not ready"; nginx -T | sed -n "1,200p"; exit 1'
+      
 
       - name: Warm up and show container logs
         if: always()

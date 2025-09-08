@@ -96,6 +96,8 @@ jobs:
       - name: Frontend integration check (wait up to 60s)
         run: |
           docker compose --env-file .env.ci exec -T frontend sh -lc '
+            # Ensure curl exists inside container (CI images may vary)
+            which curl || apk add --no-cache curl >/dev/null 2>&1 || true
             i=0
             while [ $i -lt 30 ]; do
               code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true)
@@ -118,6 +120,8 @@ jobs:
       - name: Frontend API proxy check (wait up to 60s)
         run: |
           docker compose --env-file .env.ci exec -T frontend sh -lc '
+            # Ensure curl exists inside container (CI images may vary)
+            which curl || apk add --no-cache curl >/dev/null 2>&1 || true
             i=0
             while [ $i -lt 30 ]; do
               code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/api/healthz || true)

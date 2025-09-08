@@ -265,30 +265,30 @@ jobs:
 
       - name: Probe frontend container (static first, then API; up to 120s)
         run: |
-          # Two-phase probe: A) static index, B) /api/healthz via Nginx
+          # Two-phase probe: A) static index, B) /api/healthz via Nginx (busybox wget)
           # If A passes but B fails, print backend diagnostics and continue retrying.
           i=0
           while [ $i -lt 60 ]; do
             echo "--- probe iteration $((i+1))/60 ---"
-            code_root=$(docker exec cslibrary-frontend sh -lc "which curl >/dev/null 2>&1 || apk add --no-cache curl >/dev/null 2>&1 || true; curl -fsS -o /dev/null -w '%{http_code}' http://localhost/ || true")
+            root_ok=$(docker exec cslibrary-frontend sh -lc "wget --spider -q http://localhost/ && echo yes || echo no")
             has_index=$(docker exec cslibrary-frontend sh -lc "[ -f /usr/share/nginx/html/index.html ] && echo yes || echo no")
-            code_api=$(docker exec cslibrary-frontend sh -lc "curl -fsS -o /dev/null -w '%{http_code}' http://localhost/api/healthz || true")
-            echo "[A] / -> ${code_root:-N/A}, index=${has_index}"
-            echo "[B] /api/healthz -> ${code_api:-N/A}"
+            api_ok=$(docker exec cslibrary-frontend sh -lc "wget --spider -q http://localhost/api/healthz && echo yes || echo no")
+            echo "[A] / -> ${root_ok} , index=${has_index}"
+            echo "[B] /api/healthz -> ${api_ok}"
 
-            if [ "$code_root" = "200" ] && [ "$has_index" = "yes" ] && [ "$code_api" = "200" ]; then
+            if [ "$root_ok" = "yes" ] && [ "$has_index" = "yes" ] && [ "$api_ok" = "yes" ]; then
               echo "[OK] Frontend static and API proxy healthy"
               exit 0
             fi
 
-            if [ "$code_root" = "200" ] && [ "$has_index" = "yes" ] && [ "$code_api" != "200" ]; then
-              echo "[WARN] Frontend OK but backend not ready/unreachable (api=${code_api:-N/A})"
+            if [ "$root_ok" = "yes" ] && [ "$has_index" = "yes" ] && [ "$api_ok" != "yes" ]; then
+              echo "[WARN] Frontend OK but backend not ready/unreachable"
               echo "== docker ps =="; docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' || true
               echo "== backend logs (tail 120) =="; docker logs --tail 120 cslibrary-backend || true
               echo "== backend processes =="; docker exec cslibrary-backend sh -lc "ps -ef | grep -E 'gunicorn|uvicorn' | grep -v grep || true" || true
               echo "== backend sockets =="; docker exec cslibrary-backend sh -lc "(command -v ss >/dev/null 2>&1 && ss -ltnp) || (command -v netstat >/dev/null 2>&1 && netstat -tlnp) || true" || true
             else
-              echo "[INFO] Frontend not ready yet (static=${code_root:-N/A}, index=${has_index})"
+              echo "[INFO] Frontend not ready yet (static=${root_ok}, index=${has_index})"
               # On frontend-side failure, collect targeted nginx diagnostics for clarity
               echo "--- nginx -T (head) ---"; docker exec cslibrary-frontend sh -lc "nginx -T 2>&1 | sed -n '1,120p'" || true
               echo "--- html dir ---"; docker exec cslibrary-frontend ls -lah /usr/share/nginx/html/ || true
@@ -299,6 +299,7 @@ jobs:
           done
           echo "[ERROR] Frontend probe timed out after ~120s"
           echo "--- nginx error.log (tail 200) ---"; docker exec cslibrary-frontend sh -lc "[ -f /var/log/nginx/error.log ] && tail -n 200 /var/log/nginx/error.log || true" || true
+          echo "--- /api/healthz (headers) ---"; docker exec cslibrary-frontend sh -lc "wget -S --spider http://localhost/api/healthz || true" || true
           exit 1
 
       

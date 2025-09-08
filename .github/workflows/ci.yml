@@ -93,23 +93,20 @@ jobs:
       - name: Prepare test image
         run: docker compose --env-file .env.ci cp frontend/public/placeholder.jpg backend:/app/uploads/test.jpeg
 
-      - name: Frontend integration check (wait up to 60s)
+      - name: Frontend integration check (wait up to 60s, with wget)
         run: |
           docker compose --env-file .env.ci exec -T frontend sh -lc '
-            # Ensure curl exists inside container (CI images may vary)
-            which curl || apk add --no-cache curl >/dev/null 2>&1 || true
             i=0
             while [ $i -lt 30 ]; do
-              code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true)
-              if [ "$code" = "200" ] && [ -f /usr/share/nginx/html/index.html ]; then
+              if wget --spider -q http://localhost/ && [ -f /usr/share/nginx/html/index.html ]; then
                 echo "[OK] Frontend index ready (200)"
                 exit 0
               fi
-              echo "Waiting for frontend... ($((i+1))/30) code=${code:-N/A}"
+              echo "Waiting for frontend index... ($((i+1))/30)"
               i=$((i+1))
               sleep 2
             done
-            echo "Frontend not ready after ~60s"
+            echo "Frontend index not ready after ~60s"
             echo "--- nginx -T (head) ---"; nginx -T 2>&1 | sed -n "1,200p" || true
             echo "--- html dir ---"; ls -lah /usr/share/nginx/html/ || true
             echo "--- index.html head ---"; [ -f /usr/share/nginx/html/index.html ] && head -n 20 /usr/share/nginx/html/index.html || true
@@ -117,23 +114,30 @@ jobs:
             exit 1
           '
 
-      - name: Frontend API proxy check (wait up to 60s)
+      - name: Frontend API proxy check (wait up to 60s, with wget)
         run: |
           docker compose --env-file .env.ci exec -T frontend sh -lc '
-            # Ensure curl exists inside container (CI images may vary)
-            which curl || apk add --no-cache curl >/dev/null 2>&1 || true
             i=0
             while [ $i -lt 30 ]; do
-              code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/api/healthz || true)
-              if [ "$code" = "200" ]; then
+              if wget --spider -q http://localhost/api/healthz; then
                 echo "[OK] /api proxy works (200)"
                 exit 0
               fi
-              echo "Waiting for /api proxy... ($((i+1))/30) code=${code:-N/A}"
+              echo "Waiting for /api proxy... ($((i+1))/30)"
               i=$((i+1))
               sleep 2
             done
-            echo "/api proxy not ready after ~60s"; exit 1
+            echo "/api proxy not ready after ~60s"
+            echo "--- nginx -T (head) ---"; nginx -T 2>&1 | sed -n "1,200p" || true
+            echo "--- backend dns ---"; getent hosts backend || true
+            echo "--- /api/healthz (headers) ---"; wget -S --spider http://localhost/api/healthz || true
+            exit 1
+          '
+
+      - name: Frontend API list endpoint check (materials)
+        run: |
+          docker compose --env-file .env.ci exec -T frontend sh -lc '
+            wget -S --spider http://localhost/api/materials/?page=1&size=1 2>&1 | sed -n "1,5p" || exit 1
           '
 
       - name: Tear down

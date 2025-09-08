@@ -8,11 +8,6 @@ on:
         type: string
         required: true
         default: "v1.0.0"
-      prod_build:
-        description: "Use production Dockerfiles (true) or dev (false)"
-        type: boolean
-        required: false
-        default: true
 
 permissions:
   contents: read
@@ -37,17 +32,14 @@ jobs:
           - service: backend
             context: backend
             dockerfile_prod: backend/Dockerfile.prod
-            dockerfile_dev: backend/Dockerfile.dev
             image_name: myapp-backend
           - service: frontend
             context: frontend
             dockerfile_prod: frontend/Dockerfile.prod
-            dockerfile_dev: frontend/Dockerfile.dev
             image_name: myapp-frontend
           - service: postgres
             context: postgres
             dockerfile_prod: postgres/Dockerfile
-            dockerfile_dev: postgres/Dockerfile
             image_name: myapp-postgres
     env:
       PLATFORM: linux/amd64
@@ -64,16 +56,7 @@ jobs:
           IMAGE_TAG="$(echo "${{ inputs.image_tag }}" | tr '[:upper:]' '[:lower:]')"
           echo "OWNER_LC=$OWNER_LC" >> $GITHUB_ENV
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
-          if [ "${{ inputs.prod_build }}" = "true" ]; then
-            if [ "${{ matrix.service }}" = "frontend" ]; then
-              echo "[warn] frontend prod build requested but production Dockerfile lacks devDependencies -> fallback to dev" >&2
-              DF="${{ matrix.dockerfile_dev }}"
-            else
-              DF="${{ matrix.dockerfile_prod }}"
-            fi
-          else
-            DF="${{ matrix.dockerfile_dev }}"
-          fi
+          DF="${{ matrix.dockerfile_prod }}"
           echo "DOCKERFILE=$DF" >> $GITHUB_ENV
           echo "IMAGE_NAME=${{ matrix.image_name }}" >> $GITHUB_ENV
           echo "SERVICE=${{ matrix.service }}" >> $GITHUB_ENV
@@ -97,10 +80,15 @@ jobs:
       - name: Build ${{ matrix.service }} and export docker-tar
         run: |
           OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
+          ARGS=""
+          if [ "$SERVICE" = "frontend" ]; then
+            ARGS="--build-arg VITE_API_BASE=/api"
+          fi
           docker buildx build "${{ matrix.context }}" \
             -f "$DOCKERFILE" \
             --platform "$PLATFORM" \
             --tag "$IMAGE_NAME:$IMAGE_TAG" \
+            $ARGS \
             --output "type=docker,dest=${OUT_BASENAME}.tar"
           echo "Built image: $IMAGE_NAME:$IMAGE_TAG -> ${OUT_BASENAME}.tar"
           ls -lh "${OUT_BASENAME}.tar"
@@ -109,6 +97,19 @@ jobs:
         run: |
           OUT_BASENAME="${SERVICE}_${IMAGE_TAG}_amd64"
           docker load -i "${OUT_BASENAME}.tar"
+          if [ "$SERVICE" = "frontend" ]; then
+            CMD=$(docker inspect -f '{{json .Config.Cmd}}' "$IMAGE_NAME:$IMAGE_TAG")
+            ENTRYPOINT=$(docker inspect -f '{{json .Config.Entrypoint}}' "$IMAGE_NAME:$IMAGE_TAG")
+            if echo "$CMD $ENTRYPOINT" | grep -qiE 'npm run dev|vite'; then
+              echo "[ERROR] frontend image contains dev command" >&2
+              exit 1
+            fi
+            if [ "$CMD" != '["nginx","-g","daemon off;"]' ]; then
+              echo "[ERROR] unexpected frontend CMD: $CMD" >&2
+              exit 1
+            fi
+            docker run --rm "$IMAGE_NAME:$IMAGE_TAG" sh -c "test -f /etc/nginx/nginx.conf && test -f /usr/share/nginx/html/index.html"
+          fi
           docker tag "$IMAGE_NAME:$IMAGE_TAG" "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
           docker push "ghcr.io/$OWNER_LC/$IMAGE_NAME:$IMAGE_TAG"
 
@@ -141,8 +142,7 @@ jobs:
         run: |
           echo "Services: backend, frontend, postgres" >> $GITHUB_STEP_SUMMARY
           echo "Tag: ${{ inputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "prod_build: ${{ inputs.prod_build }}" >> $GITHUB_STEP_SUMMARY
-          echo "Note: frontend may fallback to dev Dockerfile if prod lacks dev deps." >> $GITHUB_STEP_SUMMARY
+          echo "Frontend built from frontend/Dockerfile.prod with VITE_API_BASE=/api" >> $GITHUB_STEP_SUMMARY
 
   deploy:
     needs: build-export
@@ -186,6 +186,10 @@ jobs:
             --restart unless-stopped \
             --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
             ghcr.io/$OWNER_LC/myapp-frontend:$IMAGE_TAG
+
+      - name: Probe frontend container
+        run: |
+          docker exec -it cslibrary-frontend sh -lc 'apk add --no-cache curl >/dev/null 2>&1 || true; for i in $(seq 1 30); do code=$(curl -fsS -o /dev/null -w "%{http_code}" http://localhost/ || true); if [ "$code" = "200" ] && [ -f /usr/share/nginx/html/index.html ]; then echo "[OK] frontend ready"; exit 0; fi; echo "Waiting frontend ($i/30)"; sleep 2; done; echo "[FAIL] frontend not ready"; nginx -T | sed -n "1,200p"; exit 1'
 
       - name: Warm up and show container logs
         if: always()

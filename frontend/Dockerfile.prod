@@ -1,40 +1,30 @@
-# Frontend Production Dockerfile
-# Multi-stage build for optimized static file serving
+# Frontend production multi-stage Dockerfile
 
 # Build stage
-FROM node:20-alpine AS BUILDER
-
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Build-time API base (default to relative path for Nginx reverse proxy)
+# Build-time API base for Nginx reverse proxy
 ARG VITE_API_BASE="/api"
 ENV VITE_API_BASE=${VITE_API_BASE}
 
-# Copy package files and install dependencies
+# Install dependencies and build
 COPY package*.json ./
 RUN npm ci
-
-# Copy source code and build the application
 COPY . .
 RUN npm run build
 
 # Production stage with Nginx
-FROM nginx:alpine AS PRODUCTION
+FROM nginx:alpine AS production
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Install curl for health checks
+RUN apk add --no-cache curl
 
-# Ensure static directory exists and set ownership for nginx worker
-RUN mkdir -p /usr/share/nginx/html
-# Copy built application from builder stage with proper ownership
-COPY --chown=nginx:nginx --from=BUILDER /app/dist /usr/share/nginx/html
+# Copy Nginx configuration
+COPY conf.d/default.conf /etc/nginx/conf.d/default.conf
 
-# Expose port 80
+# Copy built assets
+COPY --from=builder /app/dist /usr/share/nginx/html
+
 EXPOSE 80
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost/ || exit 1
-
-# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]

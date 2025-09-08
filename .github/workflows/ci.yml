@@ -65,56 +65,43 @@ jobs:
 
       - name: Build frontend
         run: |
-          FRONTEND_DOCKERFILE=frontend/Dockerfile.prod \
-          docker compose --env-file .env.ci build --build-arg VITE_API_BASE=/api frontend
+          docker build -f frontend/Dockerfile.prod --build-arg VITE_API_BASE=/api -t library-frontend ./frontend
 
       - name: Frontend config check
         run: node scripts/check-frontend-config.js
 
-      - name: Start frontend (prod)
-        run: |
-          FRONTEND_DOCKERFILE=frontend/Dockerfile.prod \
-          docker compose --env-file .env.ci up -d frontend
-
-      - name: Nginx Pre-check diagnostics
-        run: |
-          docker compose --env-file .env.ci ps
-          docker compose --env-file .env.ci logs --no-color --tail=200 frontend || true
-
-      - name: Nginx integration check (wait up to 30s)
-        run: |
-          docker compose --env-file .env.ci exec -T frontend sh -lc '
-            i=0
-            until wget -qS --spider http://localhost/ 2>&1 | tr -d "\r" | grep -qiE "^\s*Content-Type:\s*text/html(\s*;.*)?$"; do
-              i=$((i+1))
-              if [ $i -ge 15 ]; then
-                echo "Nginx not serving text/html after ~30s"
-                exit 1
-              fi
-              echo "Waiting for Nginx static page... ($i/15)"
-              sleep 2
-            done
-          '
-
-      - name: Nginx Post-check diagnostics (on failure)
-        if: failure()
-        run: |
-          docker compose --env-file .env.ci ps
-          docker compose --env-file .env.ci logs --no-color --tail=300 frontend || true
-          docker compose --env-file .env.ci exec -T frontend sh -lc "ps -ef | grep nginx | grep -v grep || true"
-          docker compose --env-file .env.ci exec -T frontend sh -lc "nginx -T 2>/dev/null | sed -n '1,200p' || true"
-
       - name: Start frontend
-        run: docker compose --env-file .env.ci up -d frontend
+        run: docker compose --env-file .env.ci up -d --no-build frontend
 
       - name: Prepare test image
         run: docker compose --env-file .env.ci cp frontend/public/placeholder.jpg backend:/app/uploads/test.jpeg
 
-      - name: Nginx integration check
+      - name: Frontend integration check (wait up to 60s)
         run: |
-          curl -fsI http://localhost/ | grep -i 'content-type: text/html'
-          curl -fsI http://localhost/api/healthz | grep -i '200'
-          curl -fsI http://localhost/uploads/test.jpeg | grep -i 'content-type: image'
+          docker compose --env-file .env.ci exec -T frontend sh -lc '
+            i=0
+            until curl -fIs http://localhost/ | grep "200 OK" \
+              && [ -f /usr/share/nginx/html/index.html ] \
+              && curl -fIs http://localhost/api/healthz | grep "200" \
+              && curl -fIs http://localhost/uploads/test.jpeg | grep -i "Content-Type: image/jpeg"; do
+              i=$((i+1))
+              if [ $i -ge 30 ]; then
+                echo "Frontend not ready after ~60s"
+                nginx -T || true
+                ls -lah /usr/share/nginx/html/ || true
+                [ -f /usr/share/nginx/html/index.html ] && head /usr/share/nginx/html/index.html || true
+                exit 1
+              fi
+              echo "Waiting for frontend... ($i/30)"
+              sleep 2
+            done
+          '
+
+      - name: Frontend diagnostics (on failure)
+        if: failure()
+        run: |
+          docker compose --env-file .env.ci ps
+          docker compose --env-file .env.ci logs --no-color --tail=300 frontend || true
 
       - name: Tear down
         if: always()

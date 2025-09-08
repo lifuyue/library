@@ -22,6 +22,11 @@ services:
         max-file: "3"
     networks:
       - cslibrary-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
@@ -35,7 +40,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: json-file
@@ -44,6 +50,11 @@ services:
         max-file: "3"
     networks:
       - cslibrary-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   postgres:
     build:

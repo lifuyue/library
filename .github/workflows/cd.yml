@@ -139,6 +139,21 @@ jobs:
             -t ${{ steps.vars.outputs.postgres_image }}
             --push postgres
 
+      - name: Package deploy bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _bundle
+          mkdir -p _bundle
+          cp -r deploy/docker _bundle/
+
+      - name: Upload deploy bundle as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-bundle
+          path: _bundle/
+          retention-days: 7
+
       - name: Summary (images pushed)
         shell: bash
         run: |
@@ -153,7 +168,7 @@ jobs:
   deploy:
     name: Deploy on self-hosted runner
     needs: [build_and_push]
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 45
     env:
       IMAGE_TAG: ${{ needs.build_and_push.outputs.image_tag }}
@@ -162,8 +177,19 @@ jobs:
       BACKEND_IMAGE:  ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-backend:${{ needs.build_and_push.outputs.image_tag }}
       POSTGRES_IMAGE: ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-postgres:${{ needs.build_and_push.outputs.image_tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Download deploy bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-bundle
+          path: _bundle
+
+      - name: Prepare deploy dir
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${DEPLOY_DIR}"
+          cp -r _bundle/docker/. "${DEPLOY_DIR}/"
+          ls -lah "${DEPLOY_DIR}"
 
       - name: Show deploy variables
         shell: bash

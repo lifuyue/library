@@ -1,0 +1,320 @@
+name: CD: Build, Push to GHCR and Deploy
+
+on:
+  push:
+    branches: ["main"]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Deploy/rollback to a specific image tag (e.g. v1.1.0)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.ref_type }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  # Defaults (can be overridden via repository/environment variables)
+  PLATFORM: linux/amd64
+  DEPLOY_DIR: deploy/docker
+
+jobs:
+  build_and_push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      owner_lc: ${{ steps.vars.outputs.owner_lc }}
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+      frontend_image: ${{ steps.vars.outputs.frontend_image }}
+      backend_image: ${{ steps.vars.outputs.backend_image }}
+      postgres_image: ${{ steps.vars.outputs.postgres_image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive image tag and registry info
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER="${{ github.repository_owner }}"
+          OWNER_LC="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+
+          # Resolve image tag precedence: workflow_dispatch.version > release tag > latest
+          EVT="${{ github.event_name }}"
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          if [[ -n "${INPUT_VERSION}" ]]; then
+            TAG="${INPUT_VERSION}"
+          elif [[ "$EVT" == "release" ]]; then
+            TAG="${{ github.event.release.tag_name }}"
+          else
+            TAG="latest"
+          fi
+
+          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=ghcr.io/${OWNER_LC}/cslibrary-frontend:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=ghcr.io/${OWNER_LC}/cslibrary-backend:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "postgres_image=ghcr.io/${OWNER_LC}/cslibrary-postgres:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR with explicit credentials (if provided)
+        if: ${{ secrets.GHCR_USERNAME != '' && secrets.GHCR_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Login to GHCR with GITHUB_TOKEN
+        if: ${{ !(secrets.GHCR_USERNAME != '' && secrets.GHCR_TOKEN != '' ) }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Frontend Dockerfile guard rails
+        shell: bash
+        run: |
+          set -euo pipefail
+          DF="frontend/Dockerfile.prod"
+          echo "Checking $DF for production-safe settings..."
+          # Disallow dev server in RUN/CMD/ENTRYPOINT
+          if egrep -q '^\s*(RUN|CMD|ENTRYPOINT)\s+.*\bnpm\s+run\s+dev\b' "$DF"; then
+            echo "[ERROR] Found 'npm run dev' in $DF" >&2
+            exit 1
+          fi
+          # Disallow direct vite invocations in RUN/CMD/ENTRYPOINT (case-sensitive to avoid matching VITE_*)
+          if egrep -q '^\s*(RUN|CMD|ENTRYPOINT)\s+.*\bvite\b' "$DF"; then
+            echo "[ERROR] Found 'vite' dev command in $DF" >&2
+            exit 1
+          fi
+          # Require nginx foreground CMD
+          if ! egrep -qi 'CMD\\s*\\[\\s*"nginx"\\s*,\\s*"-g"\\s*,\\s*"daemon off;"\\s*\\]' "$DF"; then
+            echo "[ERROR] $DF must end with: CMD [\"nginx\", \"-g\", \"daemon off;\"]" >&2
+            echo "---- Dockerfile.prod ----"; cat "$DF"; echo "-------------------------"
+            exit 1
+          fi
+          echo "[OK] Frontend Dockerfile validated."
+
+      - name: Build and push backend
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: >-
+            docker buildx build
+            --platform ${{ env.PLATFORM }}
+            -f backend/Dockerfile.prod
+            -t ${{ steps.vars.outputs.backend_image }}
+            --push backend
+
+      - name: Build and push frontend
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: >-
+            docker buildx build
+            --platform ${{ env.PLATFORM }}
+            -f frontend/Dockerfile.prod
+            --build-arg VITE_API_BASE=/api
+            -t ${{ steps.vars.outputs.frontend_image }}
+            --push frontend
+
+      - name: Build and push postgres
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: >-
+            docker buildx build
+            --platform ${{ env.PLATFORM }}
+            -f postgres/Dockerfile
+            -t ${{ steps.vars.outputs.postgres_image }}
+            --push postgres
+
+      - name: Summary (images pushed)
+        shell: bash
+        run: |
+          {
+            echo "## Images pushed to GHCR"
+            echo
+            echo "- Backend:  ${{ steps.vars.outputs.backend_image }}"
+            echo "- Frontend: ${{ steps.vars.outputs.frontend_image }}"
+            echo "- Postgres: ${{ steps.vars.outputs.postgres_image }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy on self-hosted runner
+    needs: [build_and_push]
+    runs-on: [self-hosted]
+    timeout-minutes: 45
+    env:
+      IMAGE_TAG: ${{ needs.build_and_push.outputs.image_tag }}
+      OWNER_LC: ${{ needs.build_and_push.outputs.owner_lc }}
+      FRONTEND_IMAGE: ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-frontend:${{ needs.build_and_push.outputs.image_tag }}
+      BACKEND_IMAGE:  ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-backend:${{ needs.build_and_push.outputs.image_tag }}
+      POSTGRES_IMAGE: ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-postgres:${{ needs.build_and_push.outputs.image_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show deploy variables
+        shell: bash
+        run: |
+          echo "DEPLOY_DIR=${DEPLOY_DIR}"
+          echo "IMAGE_TAG=${IMAGE_TAG}"
+          echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
+          echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
+          echo "POSTGRES_IMAGE=${POSTGRES_IMAGE}"
+
+      - name: Docker Compose pull (with retries)
+        uses: nick-fields/retry@v2
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: >-
+            bash -lc 'set -euo pipefail;
+            cd "${DEPLOY_DIR}";
+            IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+              docker compose pull'
+
+      - name: Docker Compose up -d
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+            docker compose up -d
+
+      - name: Wait for Postgres readiness (60s)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          i=0
+          until IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+              docker compose exec -T postgres sh -lc 'pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"' ; do
+            i=$((i+1))
+            if [ $i -ge 60 ]; then
+              echo "[ERROR] Postgres not ready after ~60s" ; exit 1
+            fi
+            echo "Waiting for Postgres... ($i/60)" ; sleep 1
+          done
+          echo "[OK] Postgres is ready"
+
+      - name: Run Alembic migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+            docker compose exec -T backend alembic upgrade head
+
+      - name: Backend health check (<=60s)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          i=0
+          while true; do
+            if IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+               docker compose exec -T backend sh -lc 'curl -fsS -m 5 http://127.0.0.1:8000/healthz >/dev/null'; then
+              echo "[OK] Backend healthy"
+              break
+            fi
+            i=$((i+1))
+            if [ $i -ge 30 ]; then
+              echo "[ERROR] Backend not healthy after ~60s"
+              exit 1
+            fi
+            echo "Waiting for backend... ($i/30)" ; sleep 2
+          done
+
+      - name: Frontend health check (<=120s, 2 phases)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          i=0
+          while [ $i -lt 60 ]; do
+            root_ok=$(IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+              docker compose exec -T frontend sh -lc 'wget --spider -q http://localhost/ && echo yes || echo no')
+            has_index=$(IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+              docker compose exec -T frontend sh -lc '[ -f /usr/share/nginx/html/index.html ] && echo yes || echo no')
+            api_ok=$(IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
+              docker compose exec -T frontend sh -lc 'wget --spider -q http://localhost/api/healthz && echo yes || echo no')
+            echo "[A] / -> ${root_ok} , index=${has_index}"
+            echo "[B] /api/healthz -> ${api_ok}"
+
+            if [ "${root_ok}" = "yes" ] && [ "${has_index}" = "yes" ] && [ "${api_ok}" = "yes" ]; then
+              echo "[OK] Frontend static and API proxy healthy"
+              exit 0
+            fi
+
+            # If static is ready but API not, show backend hints
+            if [ "${root_ok}" = "yes" ] && [ "${has_index}" = "yes" ] && [ "${api_ok}" != "yes" ]; then
+              echo "[WARN] Frontend OK but backend not ready/unreachable"
+              echo "== docker ps =="; docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' || true
+              echo "== backend logs (tail 120) =="; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose logs --no-color --tail 120 backend || true
+            else
+              echo "[INFO] Frontend not ready yet (static=${root_ok}, index=${has_index})"
+              echo "--- nginx -T (head) ---"; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose exec -T frontend sh -lc 'nginx -T 2>&1 | sed -n "1,120p"' || true
+            fi
+
+            i=$((i+1))
+            sleep 2
+          done
+          echo "[ERROR] Frontend probe timed out after ~120s"
+          echo "--- nginx error.log (tail 200) ---"; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose exec -T frontend sh -lc '[ -f /var/log/nginx/error.log ] && tail -n 200 /var/log/nginx/error.log || true' || true
+          echo "--- /api/healthz (headers) ---"; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose exec -T frontend sh -lc 'wget -S --spider http://localhost/api/healthz || true' || true
+          exit 1
+
+      - name: Diagnostics (on failure)
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "== docker ps =="; docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' || true
+          echo
+          echo "== compose ps =="; cd "${DEPLOY_DIR}" && docker compose ps || true
+          echo
+          echo "== postgres logs (tail 200) =="; cd "${DEPLOY_DIR}" && docker compose logs --no-color --tail 200 postgres || true
+          echo
+          echo "== backend logs (tail 200) =="; cd "${DEPLOY_DIR}" && docker compose logs --no-color --tail 200 backend || true
+          echo
+          echo "== frontend logs (tail 200) =="; cd "${DEPLOY_DIR}" && docker compose logs --no-color --tail 200 frontend || true
+          echo
+          echo "== backend processes =="; cd "${DEPLOY_DIR}" && docker compose exec -T backend sh -lc "ps -ef | grep -E 'gunicorn|uvicorn' | grep -v grep || true" || true
+          echo
+          echo "== backend sockets =="; cd "${DEPLOY_DIR}" && docker compose exec -T backend sh -lc "(command -v ss >/dev/null 2>&1 && ss -ltnp) || (command -v netstat >/dev/null 2>&1 && netstat -tlnp) || true" || true
+
+      - name: Deployment summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Deployment Summary"
+            echo
+            echo "- Tag:        ${IMAGE_TAG}"
+            echo "- Backend:    ${BACKEND_IMAGE}"
+            echo "- Frontend:   ${FRONTEND_IMAGE}"
+            echo "- Postgres:   ${POSTGRES_IMAGE}"
+            echo
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "✅ All health checks passed."
+            else
+              echo "❌ Deployment encountered issues. Check logs above."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,13 +1,8 @@
-name: Build frontend & backend Docker images (amd64) and export docker-tars
+name: "[DEPRECATED] Build docker tars (disabled)"
 
 on:
-  workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Image version tag, e.g. v1.2.3"
-        type: string
-        required: true
-        default: "v1.0.0"
+  # Disable all auto triggers. This workflow can only be called by other workflows.
+  workflow_call: {}
 
 permissions:
   contents: read

@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - cslibrary-pgdata:/var/lib/postgresql/data
+    networks:
+      cslib-net:
+        aliases:
+          - postgresql
+
+  backend:
+    image: ${BACKEND_IMAGE}
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgresql:5432/${POSTGRES_DB}
+    depends_on:
+      - postgres
+    networks:
+      cslib-net:
+        aliases:
+          - backend
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    depends_on:
+      - backend
+    expose:
+      - "80"
+    networks:
+      - cslib-net
+
+volumes:
+  cslibrary-pgdata:
+
+networks:
+  cslib-net:
+    driver: bridge
+

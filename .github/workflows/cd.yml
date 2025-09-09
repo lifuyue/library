@@ -1,4 +1,4 @@
-name: CD: Build, Push to GHCR and Deploy
+name: "CD: Build, Push to GHCR and Deploy"
 
 on:
   push:

@@ -1,8 +1,6 @@
 name: "CD: Build, Push to GHCR and Deploy"
 
 on:
-  push:
-    branches: ["main"]
   release:
     types: [published]
   workflow_dispatch:
@@ -47,15 +45,22 @@ jobs:
           OWNER="${{ github.repository_owner }}"
           OWNER_LC="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
 
-          # Resolve image tag precedence: workflow_dispatch.version > release tag > latest
           EVT="${{ github.event_name }}"
-          INPUT_VERSION="${{ github.event.inputs.version }}"
-          if [[ -n "${INPUT_VERSION}" ]]; then
+          INPUT_VERSION="${{ github.event.inputs.version || '' }}"
+
+          if [[ "$EVT" == "workflow_dispatch" ]]; then
+            if [[ -z "${INPUT_VERSION}" ]]; then
+              echo "::error::workflow_dispatch requires 'version' input (e.g. v1.1.0)"
+              exit 1
+            fi
             TAG="${INPUT_VERSION}"
-          elif [[ "$EVT" == "release" ]]; then
-            TAG="${{ github.event.release.tag_name }}"
           else
-            TAG="latest"
+            # release: published
+            TAG="${{ github.event.release.tag_name }}"
+            if [[ -z "${TAG}" ]]; then
+              echo "::error::Empty release tag_name"
+              exit 1
+            fi
           fi
 
           echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
@@ -168,8 +173,12 @@ jobs:
   deploy:
     name: Deploy on self-hosted runner
     needs: [build_and_push]
+    # 仅在“正式 Release”或“手动触发”时部署
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.release.prerelease == false) }}
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 45
+    environment:
+      name: production
     env:
       IMAGE_TAG: ${{ needs.build_and_push.outputs.image_tag }}
       OWNER_LC: ${{ needs.build_and_push.outputs.owner_lc }}
@@ -199,6 +208,36 @@ jobs:
           echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
           echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
           echo "POSTGRES_IMAGE=${POSTGRES_IMAGE}"
+
+      - name: Prepare .env from secrets (override if provided)
+        shell: bash
+        env:
+          S_POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          S_POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          S_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          if [ ! -f .env ]; then
+            cp .env.example .env || true
+          fi
+          upsert() {
+            k="$1"; v="$2";
+            if [ -n "${v}" ]; then
+              if grep -qE "^${k}=" .env; then
+                sed -i.bak "s|^${k}=.*|${k}=${v}|g" .env
+              else
+                echo "${k}=${v}" >> .env
+              fi
+            fi
+          }
+          upsert IMAGE_TAG "${IMAGE_TAG}"
+          upsert FRONTEND_IMAGE "${FRONTEND_IMAGE}"
+          upsert BACKEND_IMAGE "${BACKEND_IMAGE}"
+          upsert POSTGRES_IMAGE "${POSTGRES_IMAGE}"
+          upsert POSTGRES_DB "${S_POSTGRES_DB:-}"
+          upsert POSTGRES_USER "${S_POSTGRES_USER:-}"
+          upsert POSTGRES_PASSWORD "${S_POSTGRES_PASSWORD:-}"
 
       - name: Docker Compose pull (with retries)
         uses: nick-fields/retry@v2

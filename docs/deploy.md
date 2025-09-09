@@ -113,3 +113,22 @@ cp deploy/docker/.env.example deploy/docker/.env
 - 前端镜像防呆校验：禁止 `npm run dev`/`vite` 作为启动命令，`CMD ["nginx","-g","daemon off;"]` 为必须。工作流在构建前会校验 `frontend/Dockerfile.prod`。
 - 不再产出 `.tar` 工件；历史 `build-tar` 工作流已被废弃并禁用自动触发。
 
+## Release 驱动部署
+
+### 发布步骤
+
+- 在 GitHub → Releases → Draft a new release。
+- 选择 Tag：`vX.Y.Z`（从 `main` 分支创建）。
+- 勾选 Pre-release：仅构建镜像并推送 GHCR，不部署到生产。
+- 发布正式 Release（非 Pre-release）：构建镜像并部署到生产环境（若仓库启用 Environments 审批，将在 `production` 环境审批通过后继续部署）。
+
+### 手动部署/回滚
+
+- 打开 GitHub → Actions → 选择 `CD: Build, Push to GHCR and Deploy` 工作流。
+- 点击 Run workflow，并填写 `version` 为要部署的镜像 tag（如 `v1.1.0`）。
+- 该方式用于热修或回滚：会拉取对应 tag 的镜像，执行迁移并完成健康检查。
+
+### 版本策略
+
+- 生产仅使用不可变的版本 tag（如 `vX.Y.Z`）进行部署。
+- 禁止使用 `latest` 作为生产切换手段，以避免不确定性部署。

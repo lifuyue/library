@@ -80,22 +80,26 @@ jobs:
           set -euo pipefail
           DF="frontend/Dockerfile.prod"
           echo "Checking $DF for production-safe settings..."
-          # Disallow dev server in RUN/CMD/ENTRYPOINT
-          if egrep -q '^\s*(RUN|CMD|ENTRYPOINT)\s+.*\bnpm\s+run\s+dev\b' "$DF"; then
+
+          # 1) Disallow dev server in RUN/CMD/ENTRYPOINT
+          if grep -Ei '^[[:space:]]*(RUN|CMD|ENTRYPOINT)[[:space:]]+.*npm[[:space:]]+run[[:space:]]+dev' "$DF"; then
             echo "[ERROR] Found 'npm run dev' in $DF" >&2
             exit 1
           fi
-          # Disallow direct vite invocations in RUN/CMD/ENTRYPOINT (case-sensitive to avoid matching VITE_*)
-          if egrep -q '^\s*(RUN|CMD|ENTRYPOINT)\s+.*\bvite\b' "$DF"; then
+
+          # 2) Disallow direct vite invocations in RUN/CMD/ENTRYPOINT (avoid matching VITE_* env vars)
+          if grep -Ei '^[[:space:]]*(RUN|CMD|ENTRYPOINT)[[:space:]]+.*(^|[^A-Z_])vite([^A-Za-z_]|$)' "$DF"; then
             echo "[ERROR] Found 'vite' dev command in $DF" >&2
             exit 1
           fi
-          # Require nginx foreground CMD
-          if ! egrep -qi 'CMD\\s*\\[\\s*"nginx"\\s*,\\s*"-g"\\s*,\\s*"daemon off;"\\s*\\]' "$DF"; then
+
+          # 3) Require nginx foreground CMD exactly
+          if ! grep -Eq '^[[:space:]]*CMD[[:space:]]*\[[[:space:]]*"nginx"[[:space:]]*,[[:space:]]*"-g"[[:space:]]*,[[:space:]]*"daemon off;"[[:space:]]*\][[:space:]]*$' "$DF"; then
             echo "[ERROR] $DF must end with: CMD [\"nginx\", \"-g\", \"daemon off;\"]" >&2
             echo "---- Dockerfile.prod ----"; cat "$DF"; echo "-------------------------"
             exit 1
           fi
+
           echo "[OK] Frontend Dockerfile validated."
 
       - name: Build and push backend

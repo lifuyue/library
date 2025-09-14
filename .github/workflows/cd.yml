@@ -584,6 +584,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
+          mkdir -p ../artifacts
+          : > ../artifacts/_placeholder.txt
           export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
           docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' > ../artifacts/docker-ps.txt || true
           docker compose ps > ../artifacts/compose-ps.txt || true
@@ -600,6 +602,7 @@ jobs:
         with:
           name: deploy-diagnostics-${{ github.run_id }}
           path: artifacts/
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Runner disk cleanup

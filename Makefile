@@ -92,7 +92,7 @@ check-backend:
 	@python3 -c "import os,sys,py_compile;files=[os.path.join(d,f) for r in ['backend'] for d,_,fs in os.walk(r) for f in fs if f.endswith('.py')];[py_compile.compile(f,doraise=True) for f in files];print('All Python files OK')"
 
 build-frontend:
-	cd frontend && npm run build
+	cd frontend && npm ci && npm run build
 
 # ----- Utilities -----
 .PHONY: clean

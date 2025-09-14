@@ -18,6 +18,7 @@ __pypackages__/
 .env.*
 !.env.ci
 !frontend/.env.development
+!**/.env.example
 .env.local
 .env.*.local
 *.sqlite*

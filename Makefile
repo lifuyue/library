@@ -1,6 +1,8 @@
 # Project Makefile — convenience commands for dev and prod
 
 SHELL := /bin/bash
+.SHELLFLAGS := -euo pipefail -c
+.ONESHELL:
 COMPOSE_STACK := deploy/docker/docker-compose.yml
 
 COMPOSE_DEV := docker-compose.dev.yml
@@ -87,24 +89,7 @@ prod-logs:
 
 check-backend:
 	@echo "Python syntax check (backend)"
-	@python - <<'PY'
-	import os, sys
-	roots = ['backend']
-	files = []
-	for root in roots:
-		for dp, _, fn in os.walk(root):
-			for f in fn:
-				if f.endswith('.py'):
-					files.append(os.path.join(dp, f))
-	ok = True
-	for f in files:
-		try:
-			compile(open(f, 'rb').read(), f, 'exec')
-		except Exception as e:
-			ok = False
-			print(f"Syntax error in {f}: {e}")
-	sys.exit(0 if ok else 1)
-	PY
+	@python3 -c "import os,sys,py_compile;files=[os.path.join(d,f) for r in ['backend'] for d,_,fs in os.walk(r) for f in fs if f.endswith('.py')];[py_compile.compile(f,doraise=True) for f in files];print('All Python files OK')"
 
 build-frontend:
 	cd frontend && npm run build

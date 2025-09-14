@@ -1,4 +1,4 @@
-name: "CD: Build, Push to GHCR and Deploy"
+name: "CD: Build, Scan, Sign, Push and Deploy"
 
 on:
   release:
@@ -8,141 +8,345 @@ on:
       version:
         description: "Deploy/rollback to a specific image tag (e.g. v1.1.0)"
         required: false
+      multiarch:
+        description: "Build multi-arch (linux/amd64,linux/arm64)"
+        required: false
+        default: "false"
+      push_dockerhub:
+        description: "Also push images to Docker Hub (lifuyue/*)"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
-  group: cd-${{ github.workflow }}-${{ github.ref_type }}-${{ github.ref_name }}
+  # Ensure only one deployment per environment+image_tag; avoid ref_name serializing for manual runs
+  group: cd-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.event.release.tag_name }}-production
   cancel-in-progress: true
 
 env:
-  # Defaults (can be overridden via repository/environment variables)
-  PLATFORM: linux/amd64
   DEPLOY_DIR: deploy/docker
+  # Compose + health defaults (can be overridden by environment vars)
+  COMPOSE_PROJECT_NAME: cslibrary-prod
+  HEALTH_INTERVAL: 5s
+  HEALTH_TIMEOUT: 5s
+  HEALTH_RETRIES: 10
+  COMPOSE_WAIT_TIMEOUT: 180s
 
 jobs:
-  build_and_push:
-    name: Build and push images
+  build_scan_sign:
+    name: Build, scan, sign and publish
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     outputs:
       owner_lc: ${{ steps.vars.outputs.owner_lc }}
       image_tag: ${{ steps.vars.outputs.image_tag }}
-      frontend_image: ${{ steps.vars.outputs.frontend_image }}
-      backend_image: ${{ steps.vars.outputs.backend_image }}
-      postgres_image: ${{ steps.vars.outputs.postgres_image }}
+      platforms: ${{ steps.vars.outputs.platforms }}
+      ghcr_backend: ${{ steps.vars.outputs.ghcr_backend }}
+      ghcr_frontend: ${{ steps.vars.outputs.ghcr_frontend }}
+      ghcr_postgres: ${{ steps.vars.outputs.ghcr_postgres }}
+      dh_backend: ${{ steps.vars.outputs.dh_backend }}
+      dh_frontend: ${{ steps.vars.outputs.dh_frontend }}
+      dh_postgres: ${{ steps.vars.outputs.dh_postgres }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.7
 
-      - name: Derive image tag and registry info
+      - name: Setup Node for basic build check
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup QEMU (for multi-arch)
+        uses: docker/setup-qemu-action@v3.6.0
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3.11.1
+        with:
+          install: true
+
+      - name: Compute image tags and metadata
         id: vars
         shell: bash
         run: |
           set -euo pipefail
-          OWNER="${{ github.repository_owner }}"
-          OWNER_LC="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
-
-          EVT="${{ github.event_name }}"
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          EVT=${{ toJSON(github.event_name) }}
           INPUT_VERSION="${{ github.event.inputs.version || '' }}"
-
-          if [[ "$EVT" == "workflow_dispatch" ]]; then
+          if [[ "${EVT}" == "workflow_dispatch" ]]; then
             if [[ -z "${INPUT_VERSION}" ]]; then
-              echo "::error::workflow_dispatch requires 'version' input (e.g. v1.1.0)"
-              exit 1
+              echo "::error::workflow_dispatch requires 'version' input (e.g. v1.1.0)"; exit 1
             fi
             TAG="${INPUT_VERSION}"
           else
-            # release: published
             TAG="${{ github.event.release.tag_name }}"
-            if [[ -z "${TAG}" ]]; then
-              echo "::error::Empty release tag_name"
-              exit 1
-            fi
+            [[ -n "${TAG}" ]] || { echo "::error::Empty release tag_name"; exit 1; }
+          fi
+
+          if [[ "${{ github.event.inputs.multiarch || 'false' }}" == "true" ]]; then
+            PLATFORMS="linux/amd64,linux/arm64"
+          else
+            PLATFORMS="linux/amd64"
           fi
 
           echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "frontend_image=ghcr.io/${OWNER_LC}/cslibrary-frontend:${TAG}" >> "$GITHUB_OUTPUT"
-          echo "backend_image=ghcr.io/${OWNER_LC}/cslibrary-backend:${TAG}" >> "$GITHUB_OUTPUT"
-          echo "postgres_image=ghcr.io/${OWNER_LC}/cslibrary-postgres:${TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          echo "platforms=${PLATFORMS}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_backend=ghcr.io/${OWNER_LC}/cslibrary-backend:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_frontend=ghcr.io/${OWNER_LC}/cslibrary-frontend:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_postgres=ghcr.io/${OWNER_LC}/cslibrary-postgres:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "dh_backend=docker.io/lifuyue/cslibrary-backend:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "dh_frontend=docker.io/lifuyue/cslibrary-frontend:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "dh_postgres=docker.io/lifuyue/cslibrary-postgres:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "revision=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v3.5.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Frontend Dockerfile guard rails
+      - name: Login to Docker Hub (optional)
+        if: ${{ github.event_name == 'release' && github.event.inputs.push_dockerhub == 'true' }}
+        uses: docker/login-action@v3.5.0
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Guard rails - Frontend Dockerfile
         shell: bash
         run: |
           set -euo pipefail
           DF="frontend/Dockerfile.prod"
+          [[ -f "$DF" ]] || { echo "::error::Missing $DF"; exit 1; }
           echo "Checking $DF for production-safe settings..."
 
-          # 1) Disallow dev server in RUN/CMD/ENTRYPOINT
-          if grep -Ei '^[[:space:]]*(RUN|CMD|ENTRYPOINT)[[:space:]]+.*npm[[:space:]]+run[[:space:]]+dev' "$DF"; then
-            echo "[ERROR] Found 'npm run dev' in $DF" >&2
-            exit 1
-          fi
+          # Disallow dev server via npm run dev
+          if grep -Eiq '^[[:space:]]*(RUN|CMD|ENTRYPOINT)[[:space:]]+[^#]*npm[[:space:]]+run[[:space:]]+dev\b' "$DF"; then
+            echo "::error file=$DF::Found 'npm run dev' in production Dockerfile"; exit 1; fi
 
-          # 2) Disallow direct vite invocations in RUN/CMD/ENTRYPOINT (avoid matching VITE_* env vars)
-          if grep -Ei '^[[:space:]]*(RUN|CMD|ENTRYPOINT)[[:space:]]+.*(^|[^A-Z_])vite([^A-Za-z_]|$)' "$DF"; then
-            echo "[ERROR] Found 'vite' dev command in $DF" >&2
-            exit 1
-          fi
+          # Disallow raw vite invocation, avoid matching VITE_* vars or comments
+          if grep -Eiq '^[[:space:]]*(RUN|CMD|ENTRYPOINT)[[:space:]]+[^#]*\bvite(\b|[[:space:]:-])' "$DF"; then
+            echo "::error file=$DF::Found dev 'vite' command in production Dockerfile"; exit 1; fi
 
-          # 3) Require nginx foreground CMD exactly
+          # Forbid installing dev deps or running tests
+          if grep -Eiq 'requirements\.dev|jest|vitest|cypress|playwright|npm[[:space:]]+i(nstall)?[[:space:]].*--save-dev|pnpm.*--filter.*dev' "$DF"; then
+            echo "::error file=$DF::Do not install devDependencies or run tests in production image"; exit 1; fi
+
+          # Require nginx foreground
           if ! grep -Eq '^[[:space:]]*CMD[[:space:]]*\[[[:space:]]*"nginx"[[:space:]]*,[[:space:]]*"-g"[[:space:]]*,[[:space:]]*"daemon off;"[[:space:]]*\][[:space:]]*$' "$DF"; then
-            echo "[ERROR] $DF must end with: CMD [\"nginx\", \"-g\", \"daemon off;\"]" >&2
-            echo "---- Dockerfile.prod ----"; cat "$DF"; echo "-------------------------"
-            exit 1
+            echo "::error file=$DF::Must end with: CMD [\"nginx\", \"-g\", \"daemon off;\"]"; exit 1; fi
+          echo "[OK] $DF validated."
+
+      - name: Guard rails - Backend Dockerfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(backend/Dockerfile.prod deploy/docker/Dockerfile.backend)
+          for DF in "${files[@]}"; do
+            [[ -f "$DF" ]] || continue
+            echo "Checking $DF for production-safe settings..."
+            # Disallow dev reload servers
+            if grep -Eiq 'uvicorn[^#]*--reload|--debug|flask[[:space:]]+run|python[[:space:]]+main\.py' "$DF"; then
+              echo "::error file=$DF::Found dev server flags (e.g., --reload)"; exit 1; fi
+            # Disallow running tests in image
+            if grep -Eiq 'pytest|coverage run' "$DF"; then
+              echo "::error file=$DF::Do not run tests in production image"; exit 1; fi
+            # Disallow installing dev requirements
+            if grep -Eiq 'requirements\.dev(\.txt)?' "$DF"; then
+              echo "::error file=$DF::Do not install dev requirements in production image"; exit 1; fi
+          done
+          echo "[OK] Backend Dockerfiles validated."
+
+      - name: Quick checks (make)
+        env:
+          CI: true
+        run: |
+          set -euo pipefail
+          make check-backend
+          make build-frontend
+
+      - name: Build and push backend (GHCR[/DockerHub])
+        if: ${{ github.event_name == 'release' }}
+        uses: nick-fields/retry@v3.0.2
+        with:
+          max_attempts: 3
+          timeout_minutes: 40
+          command: >-
+            bash -lc '
+            docker buildx build \
+              --platform "${{ steps.vars.outputs.platforms }}" \
+              -f backend/Dockerfile.prod \
+              -t "${{ steps.vars.outputs.ghcr_backend }}" \
+              $([[ "${{ github.event.inputs.push_dockerhub }}" == "true" ]] && echo -t "${{ steps.vars.outputs.dh_backend }}") \
+              --build-arg APP_VERSION="${{ steps.vars.outputs.image_tag }}" \
+              --build-arg VCS_REF="${{ steps.vars.outputs.revision }}" \
+              --label org.opencontainers.image.title="CSLibrary Backend" \
+              --label org.opencontainers.image.description="FastAPI backend for CSLibrary" \
+              --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" \
+              --label org.opencontainers.image.url="https://github.com/${{ github.repository }}" \
+              --label org.opencontainers.image.revision="${{ steps.vars.outputs.revision }}" \
+              --label org.opencontainers.image.version="${{ steps.vars.outputs.image_tag }}" \
+              --label org.opencontainers.image.created="${{ steps.vars.outputs.created }}" \
+              --label org.opencontainers.image.licenses="NOASSERTION" \
+              --cache-from type=gha,scope=backend \
+              --cache-to type=gha,mode=max,scope=backend \
+              --push backend'
+
+      - name: Build and push frontend (GHCR[/DockerHub])
+        if: ${{ github.event_name == 'release' }}
+        uses: nick-fields/retry@v3.0.2
+        with:
+          max_attempts: 3
+          timeout_minutes: 40
+          command: >-
+            bash -lc '
+            docker buildx build \
+              --platform "${{ steps.vars.outputs.platforms }}" \
+              -f frontend/Dockerfile.prod \
+              --build-arg VITE_API_BASE="/api" \
+              --build-arg APP_VERSION="${{ steps.vars.outputs.image_tag }}" \
+              -t "${{ steps.vars.outputs.ghcr_frontend }}" \
+              $([[ "${{ github.event.inputs.push_dockerhub }}" == "true" ]] && echo -t "${{ steps.vars.outputs.dh_frontend }}") \
+              --label org.opencontainers.image.title="CSLibrary Frontend" \
+              --label org.opencontainers.image.description="Vue3/Vite frontend for CSLibrary" \
+              --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" \
+              --label org.opencontainers.image.url="https://github.com/${{ github.repository }}" \
+              --label org.opencontainers.image.revision="${{ steps.vars.outputs.revision }}" \
+              --label org.opencontainers.image.version="${{ steps.vars.outputs.image_tag }}" \
+              --label org.opencontainers.image.created="${{ steps.vars.outputs.created }}" \
+              --label org.opencontainers.image.licenses="NOASSERTION" \
+              --cache-from type=gha,scope=frontend \
+              --cache-to type=gha,mode=max,scope=frontend \
+              --push frontend'
+
+      - name: Build and push postgres (GHCR[/DockerHub])
+        if: ${{ github.event_name == 'release' }}
+        uses: nick-fields/retry@v3.0.2
+        with:
+          max_attempts: 3
+          timeout_minutes: 30
+          command: >-
+            bash -lc '
+            docker buildx build \
+              --platform "${{ steps.vars.outputs.platforms }}" \
+              -f postgres/Dockerfile \
+              -t "${{ steps.vars.outputs.ghcr_postgres }}" \
+              $([[ "${{ github.event.inputs.push_dockerhub }}" == "true" ]] && echo -t "${{ steps.vars.outputs.dh_postgres }}") \
+              --label org.opencontainers.image.title="CSLibrary Postgres" \
+              --label org.opencontainers.image.description="PostgreSQL image for CSLibrary" \
+              --label org.opencontainers.image.source="https://github.com/${{ github.repository }}" \
+              --label org.opencontainers.image.url="https://github.com/${{ github.repository }}" \
+              --label org.opencontainers.image.revision="${{ steps.vars.outputs.revision }}" \
+              --label org.opencontainers.image.version="${{ steps.vars.outputs.image_tag }}" \
+              --label org.opencontainers.image.created="${{ steps.vars.outputs.created }}" \
+              --label org.opencontainers.image.licenses="NOASSERTION" \
+              --cache-from type=gha,scope=postgres \
+              --cache-to type=gha,mode=max,scope=postgres \
+              --push postgres'
+
+      - name: Resolve image digests (for signing and deploy)
+        id: dig
+        shell: bash
+        run: |
+          set -euo pipefail
+          get_digest(){
+            local ref="$1"; local digest
+            digest=$(docker buildx imagetools inspect "$ref" 2>/dev/null | awk '/^Name:/{n=NR} NR>n && /^Digest:/ {print $2; exit}')
+            [[ -n "$digest" ]] || { echo "::error::Failed to resolve digest for $ref"; exit 1; }
+            echo "$digest"
+          }
+          BE_DIG=$(get_digest "${{ steps.vars.outputs.ghcr_backend }}")
+          FE_DIG=$(get_digest "${{ steps.vars.outputs.ghcr_frontend }}")
+          PG_DIG=$(get_digest "${{ steps.vars.outputs.ghcr_postgres }}")
+          echo "backend_digest=${BE_DIG}" >> "$GITHUB_OUTPUT"
+          echo "frontend_digest=${FE_DIG}" >> "$GITHUB_OUTPUT"
+          echo "postgres_digest=${PG_DIG}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        if: ${{ github.event_name == 'release' }}
+        uses: sigstore/cosign-installer@v3.10.0
+
+      - name: Cosign sign GHCR images (OIDC keyless)
+        if: ${{ github.event_name == 'release' }}
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          for pair in \
+            "${{ steps.vars.outputs.ghcr_backend }}@${{ steps.dig.outputs.backend_digest }}" \
+            "${{ steps.vars.outputs.ghcr_frontend }}@${{ steps.dig.outputs.frontend_digest }}" \
+            "${{ steps.vars.outputs.ghcr_postgres }}@${{ steps.dig.outputs.postgres_digest }}"; do
+            echo "Signing $pair"; cosign sign "$pair"
+          done
+          if [[ "${{ github.event.inputs.push_dockerhub || 'false' }}" == "true" ]]; then
+            # Mirror signing, best-effort
+            for ref in \
+              "${{ steps.vars.outputs.dh_backend }}" \
+              "${{ steps.vars.outputs.dh_frontend }}" \
+              "${{ steps.vars.outputs.dh_postgres }}"; do
+              echo "Signing $ref (tag manifest)"; cosign sign "$ref" || true
+            done
           fi
 
-          echo "[OK] Frontend Dockerfile validated."
-
-      - name: Build and push backend
-        uses: nick-fields/retry@v2
+      - name: Generate SBOM (SPDX JSON)
+        if: ${{ github.event_name == 'release' }}
+        uses: anchore/sbom-action@v0.20.5
         with:
-          max_attempts: 3
-          timeout_minutes: 30
-          command: >-
-            docker buildx build
-            --platform ${{ env.PLATFORM }}
-            -f backend/Dockerfile.prod
-            -t ${{ steps.vars.outputs.backend_image }}
-            --push backend
+          image: ${{ steps.vars.outputs.ghcr_backend }}
+          artifact-name: sbom-backend-${{ steps.vars.outputs.image_tag }}.spdx.json
 
-      - name: Build and push frontend
-        uses: nick-fields/retry@v2
+      - name: Generate SBOM (frontend)
+        if: ${{ github.event_name == 'release' }}
+        uses: anchore/sbom-action@v0.20.5
         with:
-          max_attempts: 3
-          timeout_minutes: 30
-          command: >-
-            docker buildx build
-            --platform ${{ env.PLATFORM }}
-            -f frontend/Dockerfile.prod
-            --build-arg VITE_API_BASE=/api
-            -t ${{ steps.vars.outputs.frontend_image }}
-            --push frontend
+          image: ${{ steps.vars.outputs.ghcr_frontend }}
+          artifact-name: sbom-frontend-${{ steps.vars.outputs.image_tag }}.spdx.json
 
-      - name: Build and push postgres
-        uses: nick-fields/retry@v2
+      - name: Generate SBOM (postgres)
+        if: ${{ github.event_name == 'release' }}
+        uses: anchore/sbom-action@v0.20.5
         with:
-          max_attempts: 3
-          timeout_minutes: 30
-          command: >-
-            docker buildx build
-            --platform ${{ env.PLATFORM }}
-            -f postgres/Dockerfile
-            -t ${{ steps.vars.outputs.postgres_image }}
-            --push postgres
+          image: ${{ steps.vars.outputs.ghcr_postgres }}
+          artifact-name: sbom-postgres-${{ steps.vars.outputs.image_tag }}.spdx.json
+
+      - name: Trivy scan (backend)
+        if: ${{ github.event_name == 'release' }}
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.vars.outputs.ghcr_backend }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Trivy scan (frontend)
+        if: ${{ github.event_name == 'release' }}
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.vars.outputs.ghcr_frontend }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Trivy scan (postgres)
+        if: ${{ github.event_name == 'release' }}
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.vars.outputs.ghcr_postgres }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
 
       - name: Package deploy bundle
         shell: bash
@@ -151,43 +355,71 @@ jobs:
           rm -rf _bundle
           mkdir -p _bundle
           cp -r deploy/docker _bundle/
+          # Ensure health override compose is included
+          if [[ ! -f _bundle/docker/docker-compose.health.yml ]]; then
+            echo "::warning::Missing docker-compose.health.yml in repo; make sure it exists."
+          fi
 
-      - name: Upload deploy bundle as artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload deploy bundle
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: deploy-bundle
           path: _bundle/
-          retention-days: 7
+          retention-days: 14
 
-      - name: Summary (images pushed)
+      - name: Build/Scan/Sign Summary
         shell: bash
         run: |
           {
-            echo "## Images pushed to GHCR"
+            echo "## Build/Scan/Sign Summary"
             echo
-            echo "- Backend:  ${{ steps.vars.outputs.backend_image }}"
-            echo "- Frontend: ${{ steps.vars.outputs.frontend_image }}"
-            echo "- Postgres: ${{ steps.vars.outputs.postgres_image }}"
+            echo "- Tag:        ${{ steps.vars.outputs.image_tag }}"
+            echo "- Platforms:  ${{ steps.vars.outputs.platforms }}"
+            echo "- GHCR:"
+            echo "  - Backend:  ${{ steps.vars.outputs.ghcr_backend }} @ ${{ steps.dig.outputs.backend_digest }}"
+            echo "  - Frontend: ${{ steps.vars.outputs.ghcr_frontend }} @ ${{ steps.dig.outputs.frontend_digest }}"
+            echo "  - Postgres: ${{ steps.vars.outputs.ghcr_postgres }} @ ${{ steps.dig.outputs.postgres_digest }}"
+            if [ "${{ github.event.inputs.push_dockerhub || 'false' }}" = "true" ]; then
+              echo "- Docker Hub:"
+              echo "  - Backend:  ${{ steps.vars.outputs.dh_backend }}"
+              echo "  - Frontend: ${{ steps.vars.outputs.dh_frontend }}"
+              echo "  - Postgres: ${{ steps.vars.outputs.dh_postgres }}"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
-    name: Deploy on self-hosted runner
-    needs: [build_and_push]
-    # 仅在“正式 Release”或“手动触发”时部署
+    name: Deploy (self-hosted, production)
+    needs: [build_scan_sign]
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.release.prerelease == false) }}
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 45
+    timeout-minutes: 60
     environment:
       name: production
     env:
-      IMAGE_TAG: ${{ needs.build_and_push.outputs.image_tag }}
-      OWNER_LC: ${{ needs.build_and_push.outputs.owner_lc }}
-      FRONTEND_IMAGE: ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-frontend:${{ needs.build_and_push.outputs.image_tag }}
-      BACKEND_IMAGE:  ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-backend:${{ needs.build_and_push.outputs.image_tag }}
-      POSTGRES_IMAGE: ghcr.io/${{ needs.build_and_push.outputs.owner_lc }}/cslibrary-postgres:${{ needs.build_and_push.outputs.image_tag }}
+      OWNER_LC: ${{ needs.build_scan_sign.outputs.owner_lc }}
+      IMAGE_TAG: ${{ needs.build_scan_sign.outputs.image_tag }}
+      GHCR_BACKEND: ${{ needs.build_scan_sign.outputs.ghcr_backend }}
+      GHCR_FRONTEND: ${{ needs.build_scan_sign.outputs.ghcr_frontend }}
+      GHCR_POSTGRES: ${{ needs.build_scan_sign.outputs.ghcr_postgres }}
+      COMPOSE_PROJECT_NAME: cslibrary-prod
     steps:
+      - name: Runner pre-cleanup (light)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Clean dangling images/caches to reduce disk pressure
+          docker image prune -af || true
+          docker builder prune -af || true
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download deploy bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5.0.0
         with:
           name: deploy-bundle
           path: _bundle
@@ -196,185 +428,210 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "${DEPLOY_DIR}"
+          mkdir -p "${DEPLOY_DIR}" "${DEPLOY_DIR}/releases" artifacts
           cp -r _bundle/docker/. "${DEPLOY_DIR}/"
           ls -lah "${DEPLOY_DIR}"
 
-      - name: Show deploy variables
+      - name: Preflight - validate deploy structure and .env.example keys
         shell: bash
         run: |
-          echo "DEPLOY_DIR=${DEPLOY_DIR}"
-          echo "IMAGE_TAG=${IMAGE_TAG}"
-          echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}"
-          echo "BACKEND_IMAGE=${BACKEND_IMAGE}"
-          echo "POSTGRES_IMAGE=${POSTGRES_IMAGE}"
+          set -euo pipefail
+          require_file(){ [[ -f "$1" ]] || { echo "::error::Missing $1"; exit 1; }; }
+          require_file "${DEPLOY_DIR}/docker-compose.yml"
+          require_file "${DEPLOY_DIR}/.env.example"
+          for k in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD; do
+            if ! grep -qE "^${k}=" "${DEPLOY_DIR}/.env.example"; then
+              echo "::error file=${DEPLOY_DIR}/.env.example::Missing key ${k} in .env.example"; exit 1
+            fi
+          done
 
-      - name: Prepare .env from secrets (override if provided)
+      - name: Check Docker/Compose versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          DOCKER_V=$(docker version --format '{{.Server.Version}}')
+          COMPOSE_V=$(docker compose version --short)
+          echo "Docker: ${DOCKER_V}"
+          echo "Compose: ${COMPOSE_V}"
+          min_ver(){ printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1; }
+          [[ "$(min_ver "$DOCKER_V" "24.0.0")" == "24.0.0" ]] || { echo "::error::Docker >= 24.0.0 required"; exit 1; }
+          [[ "$(min_ver "$COMPOSE_V" "2.20.0")" == "2.20.0" ]] || { echo "::error::Docker Compose >= 2.20.0 required"; exit 1; }
+
+      - name: Resolve digests for deploy
+        id: dig
+        shell: bash
+        run: |
+          set -euo pipefail
+          get_digest(){
+            local ref="$1"; local digest
+            digest=$(docker buildx imagetools inspect "$ref" 2>/dev/null | awk '/^Name:/{n=NR} NR>n && /^Digest:/ {print $2; exit}')
+            [[ -n "$digest" ]] || { echo "::error::Failed to resolve digest for $ref"; exit 1; }
+            echo "$digest"
+          }
+          echo "backend=ghcr.io/${OWNER_LC}/cslibrary-backend@$(get_digest "$GHCR_BACKEND")" >> "$GITHUB_OUTPUT"
+          echo "frontend=ghcr.io/${OWNER_LC}/cslibrary-frontend@$(get_digest "$GHCR_FRONTEND")" >> "$GITHUB_OUTPUT"
+          echo "postgres=ghcr.io/${OWNER_LC}/cslibrary-postgres@$(get_digest "$GHCR_POSTGRES")" >> "$GITHUB_OUTPUT"
+
+      - name: Compose login sanity pull
         shell: bash
         env:
-          S_POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          S_POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          S_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          BACKEND_IMAGE: ${{ steps.dig.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.dig.outputs.frontend }}
+          POSTGRES_IMAGE: ${{ steps.dig.outputs.postgres }}
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          if [ ! -f .env ]; then
-            cp .env.example .env || true
+          BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" POSTGRES_IMAGE="$POSTGRES_IMAGE" \
+            docker compose pull
+
+      - name: Prepare phase - start Postgres only (--wait)
+        shell: bash
+        env:
+          BACKEND_IMAGE: ${{ steps.dig.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.dig.outputs.frontend }}
+          POSTGRES_IMAGE: ${{ steps.dig.outputs.postgres }}
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
+          BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" POSTGRES_IMAGE="$POSTGRES_IMAGE" \
+            docker compose up -d --wait --wait-timeout ${COMPOSE_WAIT_TIMEOUT} postgres
+
+      - name: Alembic migrations (compose run)
+        shell: bash
+        env:
+          BACKEND_IMAGE: ${{ steps.dig.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.dig.outputs.frontend }}
+          POSTGRES_IMAGE: ${{ steps.dig.outputs.postgres }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
+          # Run migrations in a throw-away container; do not exec into running backend
+          BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" POSTGRES_IMAGE="$POSTGRES_IMAGE" \
+            POSTGRES_DB="$POSTGRES_DB" POSTGRES_USER="$POSTGRES_USER" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            docker compose run --rm backend alembic upgrade head
+
+      - name: Switch phase - start/upgrade app (--wait, remove orphans)
+        id: switch
+        shell: bash
+        env:
+          BACKEND_IMAGE: ${{ steps.dig.outputs.backend }}
+          FRONTEND_IMAGE: ${{ steps.dig.outputs.frontend }}
+          POSTGRES_IMAGE: ${{ steps.dig.outputs.postgres }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
+          # Record previous successful release before switch
+          if [[ -f releases/current.env ]]; then cp releases/current.env releases/previous.env; fi
+          echo "BACKEND_IMAGE=${BACKEND_IMAGE}" > releases/pending.env
+          echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> releases/pending.env
+          echo "POSTGRES_IMAGE=${POSTGRES_IMAGE}" >> releases/pending.env
+          # Switch
+          set +e
+          BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" POSTGRES_IMAGE="$POSTGRES_IMAGE" \
+            POSTGRES_DB="$POSTGRES_DB" POSTGRES_USER="$POSTGRES_USER" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            docker compose up -d --remove-orphans --wait --wait-timeout ${COMPOSE_WAIT_TIMEOUT}
+          rc=$?
+          set -e
+          if [[ $rc -ne 0 ]]; then
+            echo "::error::Deployment failed during switch; initiating rollback"
+            echo "rolled_back=false" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
-          upsert() {
-            k="$1"; v="$2";
-            if [ -n "${v}" ]; then
-              if grep -qE "^${k}=" .env; then
-                sed -i.bak "s|^${k}=.*|${k}=${v}|g" .env
-              else
-                echo "${k}=${v}" >> .env
-              fi
-            fi
-          }
-          upsert IMAGE_TAG "${IMAGE_TAG}"
-          upsert FRONTEND_IMAGE "${FRONTEND_IMAGE}"
-          upsert BACKEND_IMAGE "${BACKEND_IMAGE}"
-          upsert POSTGRES_IMAGE "${POSTGRES_IMAGE}"
-          upsert POSTGRES_DB "${S_POSTGRES_DB:-}"
-          upsert POSTGRES_USER "${S_POSTGRES_USER:-}"
-          upsert POSTGRES_PASSWORD "${S_POSTGRES_PASSWORD:-}"
+          mv releases/pending.env releases/current.env
+          echo "rolled_back=false" >> "$GITHUB_OUTPUT"
 
-      - name: Docker Compose pull (with retries)
-        uses: nick-fields/retry@v2
-        with:
-          max_attempts: 3
-          timeout_minutes: 10
-          command: >-
-            bash -lc 'set -euo pipefail;
-            cd "${DEPLOY_DIR}";
-            IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-              docker compose pull'
-
-      - name: Docker Compose up -d
+      - name: Rollback on failure to previous successful digests
+        if: failure() && steps.switch.outcome == 'failure'
         shell: bash
+        env:
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
           set -euo pipefail
           cd "${DEPLOY_DIR}"
-          IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-            docker compose up -d
+          export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
+          if [[ ! -f releases/previous.env ]]; then
+            echo "::warning::No previous.env found; cannot rollback automatically"; exit 1
+          fi
+          source releases/previous.env
+          echo "Rolling back to: $BACKEND_IMAGE | $FRONTEND_IMAGE | $POSTGRES_IMAGE"
+          BACKEND_IMAGE="$BACKEND_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" POSTGRES_IMAGE="$POSTGRES_IMAGE" \
+            POSTGRES_DB="$POSTGRES_DB" POSTGRES_USER="$POSTGRES_USER" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            docker compose up -d --remove-orphans --wait --wait-timeout ${COMPOSE_WAIT_TIMEOUT}
+          cp releases/previous.env releases/current.env
 
-      - name: Wait for Postgres readiness (60s)
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "${DEPLOY_DIR}"
-          i=0
-          until IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-              docker compose exec -T postgres sh -lc 'pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"' ; do
-            i=$((i+1))
-            if [ $i -ge 60 ]; then
-              echo "[ERROR] Postgres not ready after ~60s" ; exit 1
-            fi
-            echo "Waiting for Postgres... ($i/60)" ; sleep 1
-          done
-          echo "[OK] Postgres is ready"
-
-      - name: Run Alembic migrations
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "${DEPLOY_DIR}"
-          IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-            docker compose exec -T backend alembic upgrade head
-
-      - name: Backend health check (<=60s)
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "${DEPLOY_DIR}"
-          i=0
-          while true; do
-            if IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-               docker compose exec -T backend sh -lc 'curl -fsS -m 5 http://127.0.0.1:8000/healthz >/dev/null'; then
-              echo "[OK] Backend healthy"
-              break
-            fi
-            i=$((i+1))
-            if [ $i -ge 30 ]; then
-              echo "[ERROR] Backend not healthy after ~60s"
-              exit 1
-            fi
-            echo "Waiting for backend... ($i/30)" ; sleep 2
-          done
-
-      - name: Frontend health check (<=120s, 2 phases)
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "${DEPLOY_DIR}"
-          i=0
-          while [ $i -lt 60 ]; do
-            root_ok=$(IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-              docker compose exec -T frontend sh -lc 'wget --spider -q http://localhost/ && echo yes || echo no')
-            has_index=$(IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-              docker compose exec -T frontend sh -lc '[ -f /usr/share/nginx/html/index.html ] && echo yes || echo no')
-            api_ok=$(IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" \
-              docker compose exec -T frontend sh -lc 'wget --spider -q http://localhost/api/healthz && echo yes || echo no')
-            echo "[A] / -> ${root_ok} , index=${has_index}"
-            echo "[B] /api/healthz -> ${api_ok}"
-
-            if [ "${root_ok}" = "yes" ] && [ "${has_index}" = "yes" ] && [ "${api_ok}" = "yes" ]; then
-              echo "[OK] Frontend static and API proxy healthy"
-              exit 0
-            fi
-
-            # If static is ready but API not, show backend hints
-            if [ "${root_ok}" = "yes" ] && [ "${has_index}" = "yes" ] && [ "${api_ok}" != "yes" ]; then
-              echo "[WARN] Frontend OK but backend not ready/unreachable"
-              echo "== docker ps =="; docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' || true
-              echo "== backend logs (tail 120) =="; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose logs --no-color --tail 120 backend || true
-            else
-              echo "[INFO] Frontend not ready yet (static=${root_ok}, index=${has_index})"
-              echo "--- nginx -T (head) ---"; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose exec -T frontend sh -lc 'nginx -T 2>&1 | sed -n "1,120p"' || true
-            fi
-
-            i=$((i+1))
-            sleep 2
-          done
-          echo "[ERROR] Frontend probe timed out after ~120s"
-          echo "--- nginx error.log (tail 200) ---"; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose exec -T frontend sh -lc '[ -f /var/log/nginx/error.log ] && tail -n 200 /var/log/nginx/error.log || true' || true
-          echo "--- /api/healthz (headers) ---"; IMAGE_TAG="${IMAGE_TAG}" FRONTEND_IMAGE="${FRONTEND_IMAGE}" BACKEND_IMAGE="${BACKEND_IMAGE}" POSTGRES_IMAGE="${POSTGRES_IMAGE}" docker compose exec -T frontend sh -lc 'wget -S --spider http://localhost/api/healthz || true' || true
-          exit 1
-
-      - name: Diagnostics (on failure)
-        if: failure()
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "== docker ps =="; docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' || true
-          echo
-          echo "== compose ps =="; cd "${DEPLOY_DIR}" && docker compose ps || true
-          echo
-          echo "== postgres logs (tail 200) =="; cd "${DEPLOY_DIR}" && docker compose logs --no-color --tail 200 postgres || true
-          echo
-          echo "== backend logs (tail 200) =="; cd "${DEPLOY_DIR}" && docker compose logs --no-color --tail 200 backend || true
-          echo
-          echo "== frontend logs (tail 200) =="; cd "${DEPLOY_DIR}" && docker compose logs --no-color --tail 200 frontend || true
-          echo
-          echo "== backend processes =="; cd "${DEPLOY_DIR}" && docker compose exec -T backend sh -lc "ps -ef | grep -E 'gunicorn|uvicorn' | grep -v grep || true" || true
-          echo
-          echo "== backend sockets =="; cd "${DEPLOY_DIR}" && docker compose exec -T backend sh -lc "(command -v ss >/dev/null 2>&1 && ss -ltnp) || (command -v netstat >/dev/null 2>&1 && netstat -tlnp) || true" || true
-
-      - name: Deployment summary
+      - name: Collect diagnostics (always)
         if: always()
         shell: bash
         run: |
+          set -euo pipefail
+          cd "${DEPLOY_DIR}"
+          export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
+          docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' > ../artifacts/docker-ps.txt || true
+          docker compose ps > ../artifacts/compose-ps.txt || true
+          docker compose logs --no-color --tail=400 backend > ../artifacts/backend.log 2>&1 || true
+          docker compose logs --no-color --tail=400 frontend > ../artifacts/frontend.log 2>&1 || true
+          docker compose logs --no-color --tail=400 postgres > ../artifacts/postgres.log 2>&1 || true
+          docker compose exec -T frontend sh -lc 'nginx -T 2>/dev/null | head -n 200' > ../artifacts/nginx-config.txt 2>&1 || true
+          docker compose exec -T frontend sh -lc '[ -f /var/log/nginx/error.log ] && tail -n 200 /var/log/nginx/error.log || true' > ../artifacts/nginx-error.log 2>&1 || true
+          printf '%s\n' "${GHCR_BACKEND}" "${GHCR_FRONTEND}" "${GHCR_POSTGRES}" | xargs -I{} sh -c 'docker buildx imagetools inspect {} || true' > ../artifacts/image-inspect.txt 2>&1 || true
+
+      - name: Upload diagnostics artifacts
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: deploy-diagnostics-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
+
+      - name: Runner disk cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker system df || true
+          docker buildx prune -af || true
+          docker system prune -af --volumes || true
+
+      - name: Deployment Summary
+        if: always()
+        shell: bash
+        env:
+          BACKEND_DIG: ${{ needs.build_scan_sign.outputs.ghcr_backend }}
+        run: |
+          set -euo pipefail
           {
             echo "## Deployment Summary"
             echo
             echo "- Tag:        ${IMAGE_TAG}"
-            echo "- Backend:    ${BACKEND_IMAGE}"
-            echo "- Frontend:   ${FRONTEND_IMAGE}"
-            echo "- Postgres:   ${POSTGRES_IMAGE}"
-            echo
+            echo "- COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}"
+            echo "- Images (digests):"
+            echo "  - Backend:  ${{ steps.dig.outputs.backend }}"
+            echo "  - Frontend: ${{ steps.dig.outputs.frontend }}"
+            echo "  - Postgres: ${{ steps.dig.outputs.postgres }}"
+            if [ "${{ github.event.inputs.push_dockerhub || 'false' }}" = "true" ]; then
+              echo "- Docker Hub mirrors:"
+              echo "  - Backend:  docker.io/lifuyue/cslibrary-backend:${IMAGE_TAG}"
+              echo "  - Frontend: docker.io/lifuyue/cslibrary-frontend:${IMAGE_TAG}"
+              echo "  - Postgres: docker.io/lifuyue/cslibrary-postgres:${IMAGE_TAG}"
+            fi
+            echo "- Health timeouts: COMPOSE_WAIT_TIMEOUT=${COMPOSE_WAIT_TIMEOUT}"
+            echo "- Env priority: workflow env > .env (not used) > compose vars"
             if [ "${{ job.status }}" = "success" ]; then
-              echo "✅ All health checks passed."
+              echo "✅ Deployment healthy (compose --wait)."
             else
-              echo "❌ Deployment encountered issues. Check logs above."
+              echo "❌ Deployment encountered issues. See artifacts for diagnostics."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

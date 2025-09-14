@@ -253,15 +253,21 @@ jobs:
               --cache-to type=gha,mode=max,scope=postgres \
               --push postgres'
 
-      - name: Resolve image digests (for signing and deploy)
+      - name: Resolve image digests (for signing)
+        if: ${{ github.event_name == 'release' }}
         id: dig
         shell: bash
         run: |
           set -euo pipefail
+          tries=0
           get_digest(){
             local ref="$1"; local digest
-            digest=$(docker buildx imagetools inspect "$ref" 2>/dev/null | awk '/^Name:/{n=NR} NR>n && /^Digest:/ {print $2; exit}')
-            [[ -n "$digest" ]] || { echo "::error::Failed to resolve digest for $ref"; exit 1; }
+            # retry to avoid eventual consistency after push
+            local i; for i in 1 2 3; do
+              digest=$(docker buildx imagetools inspect "$ref" 2>/dev/null | awk '/^Name:/{n=NR} NR>n && /^Digest:/ {print $2; exit}') && [[ -n "$digest" ]] && break
+              sleep 3
+            done
+            [[ -n "$digest" ]] || { echo "::error::Failed to resolve digest for $ref (tag may not exist yet or login/permissions missing)"; exit 1; }
             echo "$digest"
           }
           BE_DIG=$(get_digest "${{ steps.vars.outputs.ghcr_backend }}")

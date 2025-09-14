@@ -45,7 +45,7 @@ library/
 │   ├── alembic.ini         # Alembic配置
 │   ├── main.py            # 应用入口
 │   └── requirements.txt   # Python依赖
-├── frontend/               # 前端 Vue 应用
+├── web/                    # 前端 Vue 应用
 │   ├── src/
 │   │   ├── api/           # API接口
 │   │   ├── components/    # 组件
@@ -54,6 +54,8 @@ library/
 │   │   └── assets/        # 静态资源
 │   ├── package.json       # Node.js依赖
 │   └── vite.config.ts     # Vite配置
+├── packages/               # 共用模块（预留）
+├── miniprogram/            # 小程序（预留）
 └── README.md              # 项目说明
 ```
 
@@ -74,7 +76,7 @@ cp .env.example .env
 本地开发可将 `.env.example` 复制为 `.env` 提供默认变量；CI 和生产环境通过运行时注入环境变量，无需 `.env` 文件。后端在开发模式下会尝试加载 `.env`（若存在），生产环境仅读取进程环境变量。
 
 > **前端 API 地址配置**
-> - **容器开发模式**：确保 `.env` 或 `frontend/.env.development` 中 `VITE_API_BASE=http://backend:8000`，再通过 `docker compose up` 一键启动。
+> - **容器开发模式**：确保 `.env` 或 `web/.env.development` 中 `VITE_API_BASE=http://backend:8000`，再通过 `docker compose up` 一键启动。
 > - **本地直连模式**：若直接访问本机后端，请设置 `VITE_API_BASE=http://127.0.0.1:8000`，并在后端开启允许该来源的 CORS。
 
 ### Docker Compose 启动（PostgreSQL）
@@ -139,7 +141,7 @@ Windows 用户指南（不再提供 .bat/.cmd）：
 - 使用 WSL 或 Git Bash 执行上述命令；
 - 或在 PowerShell 中等价运行：
   - 后端开发：`python -m uvicorn backend.main:app --reload`
-  - 前端开发：`cd frontend; npm run dev`
+  - 前端开发：`cd web; npm run dev`
   - Docker：`docker compose up -d`
 
 ### 开发环境启动
@@ -190,7 +192,7 @@ python run_server.py
 
 ```bash
 # 在新的终端窗口中
-cd frontend
+cd web
 
 # 安装依赖（首次运行）
 npm install

@@ -78,7 +78,7 @@ Environment variables are handled through Vite's built-in system:
 │   ├── .dockerignore           # Build context exclusions
 │   ├── .env                    # Development environment variables
 │   └── .env.prod               # Production environment variables
-└── frontend/
+└── web/
     ├── Dockerfile              # Development Dockerfile
     ├── Dockerfile.dev          # Development Dockerfile (explicit)
     ├── Dockerfile.prod         # Production Dockerfile

@@ -15,7 +15,7 @@ echo "3. 等待后端启动..."
 sleep 3
 
 echo "4. 安装前端依赖（如果需要）..."
-cd ../frontend
+cd ../web
 if [ ! -d "node_modules" ]; then
     echo "正在安装前端依赖..."
     npm install

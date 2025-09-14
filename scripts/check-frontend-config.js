@@ -19,7 +19,7 @@ if (apiBase) {
   console.error('VITE_API_BASE should be empty in .env.ci')
   process.exit(1)
 }
-const viteConfig = fs.readFileSync(path.join('frontend', 'vite.config.ts'), 'utf8')
+const viteConfig = fs.readFileSync(path.join('web', 'vite.config.ts'), 'utf8')
 if (viteConfig.includes('http://localhost:8000')) {
   console.error('vite.config.ts should not reference http://localhost:8000')
   process.exit(1)

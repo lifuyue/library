@@ -20,7 +20,7 @@
 - **修改现有文件**：默认仅提供「最小可读变更」，优先使用 unified diff（或补丁块：包含必要上下文 + 新旧片段）。仅当变更范围极大或对比入口无法正确渲染时，才提供完整文件内容。
 - **新增文件**：提供「路径 + 文件名 + 用途简述 + 关键片段」。当文件 < 80 行或用户明确要求时，再附上完整内容。
 - 每次变更均附带**变更摘要**（影响范围、兼容性/回滚提示），并明确可在专用对比入口查看完整 diff。
-- 修改后运行相关检查：后端 `make check-backend`；前端 `cd frontend && npm run build` 或 `make build-frontend`。
+- 修改后运行相关检查：后端 `make check-backend`；前端 `cd web && npm run build` 或 `make build-frontend`。
 
 ## 交互规范
 - 回复保持简洁；中英文混合时保留技术关键词（API、Docker、JWT 等）。

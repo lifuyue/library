@@ -3,7 +3,27 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - 'backend/**'
+      - 'web/**'
+      - 'packages/**'
+      - 'miniprogram/**'
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'docker-compose.yml'
+      - 'Makefile'
+      - 'pnpm-workspace.yaml'
   pull_request:
+    paths:
+      - 'backend/**'
+      - 'web/**'
+      - 'packages/**'
+      - 'miniprogram/**'
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'docker-compose.yml'
+      - 'Makefile'
+      - 'pnpm-workspace.yaml'
 
 jobs:
   test:
@@ -82,7 +102,7 @@ jobs:
 
       - name: Build frontend
         run: |
-          docker build -f frontend/Dockerfile.prod --build-arg VITE_API_BASE=/api -t library-frontend ./frontend
+          docker build -f web/Dockerfile.prod --build-arg VITE_API_BASE=/api -t library-frontend ./web
 
       - name: Frontend config check
         run: node scripts/check-frontend-config.js
@@ -91,7 +111,7 @@ jobs:
         run: docker compose --env-file .env.ci up -d --no-build frontend
 
       - name: Prepare test image
-        run: docker compose --env-file .env.ci cp frontend/public/placeholder.jpg backend:/app/uploads/test.jpeg
+        run: docker compose --env-file .env.ci cp web/public/placeholder.jpg backend:/app/uploads/test.jpeg
 
       - name: Frontend integration check (wait up to 60s, with wget)
         run: |

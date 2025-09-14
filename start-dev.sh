@@ -15,7 +15,7 @@ sleep 3
 
 echo ""
 echo "启动前端服务..."
-cd ../frontend && npm run dev &
+cd ../web && npm run dev &
 FRONTEND_PID=$!
 
 echo ""

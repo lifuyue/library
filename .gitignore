@@ -17,7 +17,7 @@ __pypackages__/
 .env
 .env.*
 !.env.ci
-!frontend/.env.development
+!web/.env.development
 !**/.env.example
 .env.local
 .env.*.local
@@ -32,8 +32,8 @@ node_modules/
 **/node_modules/
 dist/
 build/
-frontend/dist/
-frontend/.output/
+web/dist/
+web/.output/
 public/build/
 .vite/
 **/.vite/

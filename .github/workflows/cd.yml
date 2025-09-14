@@ -55,6 +55,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.7
 
+      - name: Debug: Git/Workspace context
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "===== GIT/WORKSPACE CONTEXT ====="
+          echo "event=${{ github.event_name }} ref=${{ github.ref }} sha=${{ github.sha }}"
+          echo "pwd=$(pwd)"
+          git rev-parse HEAD
+          git log -1 --oneline || true
+          echo "-- ls deploy/docker (incl. dotfiles) --"
+          ls -lah deploy/docker || true
+          if [[ -f deploy/docker/.env.example ]]; then
+            echo "Found deploy/docker/.env.example in checkout"
+          else
+            echo "::warning::deploy/docker/.env.example missing in checkout"
+          fi
+
       - name: Setup Node for basic build check
         uses: actions/setup-node@v5.0.0
         with:
@@ -365,6 +382,13 @@ jobs:
           if [[ ! -f _bundle/docker/docker-compose.health.yml ]]; then
             echo "::warning::Missing docker-compose.health.yml in repo; make sure it exists."
           fi
+          echo "===== BUNDLE CONTENTS (sanity) ====="
+          echo "PWD=$(pwd)"
+          ls -lah _bundle/
+          echo "-- _bundle/docker (including dotfiles) --"
+          ls -lah _bundle/docker || true
+          echo "-- _bundle/docker/.env.* --"
+          ls -lah _bundle/docker/.env* 2>/dev/null || true
 
       - name: Upload deploy bundle
         uses: actions/upload-artifact@v4.6.2
@@ -434,14 +458,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "===== PREPARE DEPLOY DIR ====="
+          echo "PWD=$(pwd)"
+          echo "DEPLOY_DIR=${DEPLOY_DIR}"
           mkdir -p "${DEPLOY_DIR}" "${DEPLOY_DIR}/releases" artifacts
           cp -r _bundle/docker/. "${DEPLOY_DIR}/"
+          echo "-- List ${DEPLOY_DIR} (including dotfiles) --"
           ls -lah "${DEPLOY_DIR}"
+          echo "-- Check for .env example --"
+          if [[ -f "${DEPLOY_DIR}/.env.example" ]]; then
+            echo "Found: ${DEPLOY_DIR}/.env.example"
+          else
+            echo "::warning::${DEPLOY_DIR}/.env.example not found right after copy"
+          fi
 
       - name: Preflight - validate deploy structure and .env.example keys
         shell: bash
         run: |
           set -euo pipefail
+          echo "===== PREFLIGHT CONTEXT ====="
+          echo "PWD=$(pwd)"
+          echo "DEPLOY_DIR=${DEPLOY_DIR}"
+          echo "Repo root listing (top-level, incl. dotfiles):"
+          ls -lah || true
+          echo "Listing ${DEPLOY_DIR} (incl. dotfiles):"
+          ls -lah "${DEPLOY_DIR}" || true
           require_file(){ [[ -f "$1" ]] || { echo "::error::Missing $1"; exit 1; }; }
           require_file "${DEPLOY_DIR}/docker-compose.yml"
           require_file "${DEPLOY_DIR}/.env.example"
@@ -583,18 +624,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd "${DEPLOY_DIR}"
-          mkdir -p ../artifacts
-          : > ../artifacts/_placeholder.txt
-          export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
-          docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' > ../artifacts/docker-ps.txt || true
-          docker compose ps > ../artifacts/compose-ps.txt || true
-          docker compose logs --no-color --tail=400 backend > ../artifacts/backend.log 2>&1 || true
-          docker compose logs --no-color --tail=400 frontend > ../artifacts/frontend.log 2>&1 || true
-          docker compose logs --no-color --tail=400 postgres > ../artifacts/postgres.log 2>&1 || true
-          docker compose exec -T frontend sh -lc 'nginx -T 2>/dev/null | head -n 200' > ../artifacts/nginx-config.txt 2>&1 || true
-          docker compose exec -T frontend sh -lc '[ -f /var/log/nginx/error.log ] && tail -n 200 /var/log/nginx/error.log || true' > ../artifacts/nginx-error.log 2>&1 || true
-          printf '%s\n' "${GHCR_BACKEND}" "${GHCR_FRONTEND}" "${GHCR_POSTGRES}" | xargs -I{} sh -c 'docker buildx imagetools inspect {} || true' > ../artifacts/image-inspect.txt 2>&1 || true
+          echo "===== COLLECT DIAGNOSTICS ====="
+          echo "PWD=$(pwd)"
+          echo "DEPLOY_DIR=${DEPLOY_DIR}"
+          mkdir -p artifacts
+          : > artifacts/_placeholder.txt
+          if [[ -d "${DEPLOY_DIR}" ]]; then
+            (
+              set -e
+              cd "${DEPLOY_DIR}"
+              export COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml:${DEPLOY_DIR}/docker-compose.health.yml"
+              docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}\t{{.Image}}' > ../artifacts/docker-ps.txt || true
+              docker compose ps > ../artifacts/compose-ps.txt || true
+              docker compose logs --no-color --tail=400 backend > ../artifacts/backend.log 2>&1 || true
+              docker compose logs --no-color --tail=400 frontend > ../artifacts/frontend.log 2>&1 || true
+              docker compose logs --no-color --tail=400 postgres > ../artifacts/postgres.log 2>&1 || true
+              docker compose exec -T frontend sh -lc 'nginx -T 2>/dev/null | head -n 200' > ../artifacts/nginx-config.txt 2>&1 || true
+              docker compose exec -T frontend sh -lc '[ -f /var/log/nginx/error.log ] && tail -n 200 /var/log/nginx/error.log || true' > ../artifacts/nginx-error.log 2>&1 || true
+              printf '%s\n' "${GHCR_BACKEND}" "${GHCR_FRONTEND}" "${GHCR_POSTGRES}" | xargs -I{} sh -c 'docker buildx imagetools inspect {} || true' > ../artifacts/image-inspect.txt 2>&1 || true
+            )
+          else
+            echo "DEPLOY_DIR not found, writing context only" > artifacts/_no_deploy_dir.txt
+            echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE:-}" >> artifacts/_no_deploy_dir.txt
+            echo "RUNNER_OS=${RUNNER_OS:-}" >> artifacts/_no_deploy_dir.txt
+            echo "Listing repo root:" >> artifacts/_no_deploy_dir.txt
+            ls -lah >> artifacts/_no_deploy_dir.txt || true
+          fi
 
       - name: Upload diagnostics artifacts
         if: always()

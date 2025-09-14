@@ -110,7 +110,7 @@ cp deploy/docker/.env.example deploy/docker/.env
 
 ### 约束与建议
 
-- 前端镜像防呆校验：禁止 `npm run dev`/`vite` 作为启动命令，`CMD ["nginx","-g","daemon off;"]` 为必须。工作流在构建前会校验 `frontend/Dockerfile.prod`。
+- 前端镜像防呆校验：禁止 `npm run dev`/`vite` 作为启动命令，`CMD ["nginx","-g","daemon off;"]` 为必须。工作流在构建前会校验 `web/Dockerfile.prod`。
 - 不再产出 `.tar` 工件；历史 `build-tar` 工作流已被废弃并禁用自动触发。
 
 ## Release 驱动部署

@@ -32,7 +32,7 @@ def start_backend():
 def start_frontend():
     """启动前端服务"""
     print("🌐 启动前端服务...")
-    frontend_dir = Path("frontend")
+    frontend_dir = Path("web")
     
     if platform.system() == "Windows":
         cmd = "start cmd /k \"npm run dev\""

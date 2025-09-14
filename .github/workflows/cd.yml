@@ -77,7 +77,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Setup QEMU (for multi-arch)
         uses: docker/setup-qemu-action@v3.6.0
@@ -142,7 +142,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          DF="frontend/Dockerfile.prod"
+          DF="web/Dockerfile.prod"
           [[ -f "$DF" ]] || { echo "::error::Missing $DF"; exit 1; }
           echo "Checking $DF for production-safe settings..."
 
@@ -228,7 +228,7 @@ jobs:
             bash -lc '
             docker buildx build \
               --platform "${{ steps.vars.outputs.platforms }}" \
-              -f frontend/Dockerfile.prod \
+              -f web/Dockerfile.prod \
               --build-arg VITE_API_BASE="/api" \
               --build-arg APP_VERSION="${{ steps.vars.outputs.image_tag }}" \
               -t "${{ steps.vars.outputs.ghcr_frontend }}" \
@@ -243,7 +243,7 @@ jobs:
               --label org.opencontainers.image.licenses="NOASSERTION" \
               --cache-from type=gha,scope=frontend \
               --cache-to type=gha,mode=max,scope=frontend \
-              --push frontend'
+              --push web'
 
       - name: Build and push postgres (GHCR[/DockerHub])
         if: ${{ github.event_name == 'release' }}

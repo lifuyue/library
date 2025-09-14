@@ -2,11 +2,11 @@ FROM nginx:stable-alpine
 # 工具：为健康检查提供 curl
 RUN apk add --no-cache curl
 
-# 复制本机已构建的前端产物（frontend/dist）
-COPY frontend/dist /usr/share/nginx/html
+# 复制本机已构建的前端产物（web/dist）
+COPY web/dist /usr/share/nginx/html
 
 # 使用自定义的 nginx.conf 以提升日志等级
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 
 # 暴露端口
 EXPOSE 80
